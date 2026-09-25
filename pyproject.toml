@@ -1,0 +1,33 @@
+[project]
+name = "metro"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "BredanKM", email = "bredankm@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "gtfs-realtime-bindings>=3.0.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.3",
+]
+
+[project.scripts]
+metro = "metro:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.9",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
