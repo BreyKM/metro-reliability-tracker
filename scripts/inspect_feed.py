@@ -10,6 +10,7 @@ from google.transit import gtfs_realtime_pb2
 
 FEED_URL = "https://api.ridemetro.org/GtfsRealtime/TripUpdates"
 
+
 def fetch(api_key: str) -> bytes:
     resp = httpx.get(
         FEED_URL,
@@ -42,9 +43,11 @@ def describe(raw: bytes) -> None:
             continue
 
         tu = entity.trip_update
-        trip_relationships[gtfs_realtime_pb2.TripDescriptor.ScheduleRelationship.Name(
-            tu.trip.schedule_relationship
-        )] += 1
+        trip_relationships[
+            gtfs_realtime_pb2.TripDescriptor.ScheduleRelationship.Name(
+                tu.trip.schedule_relationship
+            )
+        ] += 1
         for field in ("trip_id", "route_id", "start_date", "start_time"):
             if tu.trip.HasField(field):
                 present[f"trip.{field}"] += 1
@@ -67,7 +70,7 @@ def describe(raw: bytes) -> None:
     print(f"entity kinds:     {dict(kinds)}")
     print(f"trip relationships: {dict(trip_relationships)}")
     print(f"stop_time_updates: {stu_count:,}")
-    print(f"fields present (count):")
+    print("fields present (count):")
     for name, n in sorted(present.items()):
         print(f"  {name:<22} {n:,}")
 

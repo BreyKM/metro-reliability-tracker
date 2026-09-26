@@ -19,7 +19,7 @@ def main() -> None:
         sys.exit("METRO_GTFSRT_KEY is not set; copy .env.example to .env and fill it in")
 
     last_header = None
-    deadline = time.monotonic() +  DURATION_SECONDS
+    deadline = time.monotonic() + DURATION_SECONDS
     headers = {"Ocp-Apim-Subscription-Key": api_key}
 
     with httpx.Client(headers=headers, timeout=15.0) as client:
@@ -32,7 +32,6 @@ def main() -> None:
                 time.sleep(retry_after)
                 continue
             resp.raise_for_status()
-
 
             feed = gtfs_realtime_pb2.FeedMessage()
             feed.ParseFromString(resp.content)

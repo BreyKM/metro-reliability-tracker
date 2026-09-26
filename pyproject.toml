@@ -1,7 +1,7 @@
 [project]
 name = "metro"
 version = "0.1.0"
-description = "Add your description here"
+description = "Records Houston METRO's realtime bus feed to measure how late buses actually run."
 readme = "README.md"
 authors = [
     { name = "BredanKM", email = "bredankm@gmail.com" }
@@ -31,3 +31,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
