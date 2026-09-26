@@ -18,11 +18,7 @@ def main() -> None:
     if not api_key:
         sys.exit("METRO_TRANSIT_DATA_KEY is not set; copy .env.example to .env and fill it in")
 
-    resp = httpx.get(
-        VEHICLES_URL,
-        headers={"Ocp-Apim-Subscription-Key": api_key},
-        timeout=15.0
-    )
+    resp = httpx.get(VEHICLES_URL, headers={"Ocp-Apim-Subscription-Key": api_key}, timeout=15.0)
     resp.raise_for_status()
 
     out = Path("data/raw") / f"vehicles_{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"
