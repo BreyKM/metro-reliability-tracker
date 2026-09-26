@@ -131,6 +131,14 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** If METRO's header clock were wrong, my timestamps would be wrong in the same way. `poll.requested_at` next to `header_timestamp` makes that visible.  
 **Revisit if:** The header timestamp turns out to be unreliable, for example repeating while the content changes.
 
+## 17. Vehicle positions are append-only, stored as reported
+
+**Date:** 2026-09-26  
+**Decision:** One row per `(vehicle_id, reported_at, trip_id)`, inserted with `ON CONFLICT DO NOTHING` and never updated. Both rows are kept when a bus is listed on two trips. IDs are stored exactly as the API sends them. Coordinates are `real`.  
+**Why:** A reported position is a fixed fact, unlike a prediction, which changes (#4). Picking the "current" trip, or stripping the ID prefix, while storing would bake unverified rules into data that can't be collected again. The API's coordinates already have 4-byte float precision (`29.6662502288818` is a float32 value printed as a double), so `real` loses nothing and halves the size of those columns.  
+**Tradeoff:** Buses listed on two trips store their position twice (~10% of rows in my sample). Queries have to choose the current trip themselves.  
+**Revisit if:** The current-trip rule is confirmed and the duplicates start to matter for storage.
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
@@ -138,3 +146,4 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 - **Which Vehicles row is the current trip** when a bus has two rows.
 - **GPS staleness cutoff** for arrival detection.
 - **Poll interval for Vehicles.** Probably 30 s like TripUpdates, but its rate limit hasn't been measured.
+- **Retention for `vehicle_position`.** Rough worst case is ~1M rows/day (~3–4 GB/month). Measure actual size after a few days of collection, then decide when old positions can be deleted.
