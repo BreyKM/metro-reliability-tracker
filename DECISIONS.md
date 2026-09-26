@@ -115,6 +115,22 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** My development database isn't set up the same way as production. Pinning the same major version everywhere keeps the differences small, and the SQL is identical.  
 **Revisit if:** I move to Windows Pro or a Linux/macOS development machine.
 
+## 15. Upserts only move forward in time
+
+**Date:** 2026-09-25  
+**Decision:** The `stop_prediction` upsert only updates an existing row when the incoming observation is newer: `ON CONFLICT ... DO UPDATE ... WHERE stop_prediction.last_seen_at < EXCLUDED.last_seen_at`. Applying the same snapshot twice changes nothing, including `update_count`.  
+**Why:** Without the guard, reprocessing a snapshot would count the same observation twice, and processing snapshots out of order would let an older prediction overwrite a newer one. Reprocessing happens after a crash mid-batch or when rebuilding from raw files. The last prediction is the whole metric (#3), so it can never go backward. The original brief's test expected `update_count` to go up when the same fixture was applied twice. I think that's the wrong behavior, so the test will check that it stays the same.  
+**Tradeoff:** Two observations with the exact same header timestamp can't both be applied. Only the first one counts. That's correct, since they're the same snapshot.  
+**Revisit if:** I need a separate audit trail of every time a snapshot was processed. That would go in its own table, not this one.
+
+## 16. "Seen at" means METRO's feed timestamp, not my request time
+
+**Date:** 2026-09-25  
+**Decision:** `first_seen_at` and `last_seen_at` in `stop_prediction` store the feed's `header.timestamp`. My own request time goes only in `poll.requested_at`.  
+**Why:** The lead-time check (`predicted_arrival − last_seen_at`, #3) should measure from when METRO made the prediction, not from when my request happened to go out. The feed was 2 to 14 s old when fetched in my cadence probe. The header timestamp is also inside the raw file, so rebuilding rows from raw snapshots gives the same result no matter when I rerun it, which is what makes #15's forward-only check work during a rebuild.  
+**Tradeoff:** If METRO's header clock were wrong, my timestamps would be wrong in the same way. `poll.requested_at` next to `header_timestamp` makes that visible.  
+**Revisit if:** The header timestamp turns out to be unreliable, for example repeating while the content changes.
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
