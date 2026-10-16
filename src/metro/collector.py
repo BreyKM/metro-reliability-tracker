@@ -48,11 +48,16 @@ class TripUpdatesCollector:
         if resp.status_code == 429:
             retry_after = _retry_after_seconds(resp)
             self._log_failure(
-                requested_at, started, http_status=429, error=f"rate limited, retry after {retry_after:.0f}s"
+                requested_at,
+                started,
+                http_status=429,
+                error=f"rate limited, retry after {retry_after:.0f}s",
             )
             return retry_after
         if resp.status_code != 200:
-            self._log_failure(requested_at, started, http_status=resp.status_code, error=resp.text[:200])
+            self._log_failure(
+                requested_at, started, http_status=resp.status_code, error=resp.text[:200]
+            )
             return 0.0
 
         raw = resp.content
@@ -61,7 +66,7 @@ class TripUpdatesCollector:
             requested_at=requested_at,
             duration_ms=_ms_since(started),
             http_status=200,
-            bytes=len(raw)
+            bytes=len(raw),
         )
         try:
             snapshot = parse_trip_updates(raw)
@@ -98,7 +103,9 @@ class TripUpdatesCollector:
         return 0.0
 
     def _log_failure(self, requested_at: datetime, started: float, **fields) -> None:
-        poll = PollRecord(feed=FEED, requested_at=requested_at, duration_ms=_ms_since(started), **fields)
+        poll = PollRecord(
+            feed=FEED, requested_at=requested_at, duration_ms=_ms_since(started), **fields
+        )
         insert_poll(self.conn, poll)
         log.warning("poll failed: %s", poll.error)
 
@@ -177,7 +184,9 @@ def _ms_since(started: float) -> int:
 def main() -> None:
     load_dotenv()
     logging.Formatter.converter = time.gmtime
-    logging.basicConfig(level=logging.INFO, format="%(asctime)sZ %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)sZ %(levelname)s %(name)s: %(message)s"
+    )
     logging.getLogger("httpx").setLevel(logging.WARNING)
     run(load_settings())
 

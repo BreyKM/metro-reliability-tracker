@@ -40,7 +40,7 @@ def test_unchanged_snapshot_is_logged_but_skipped(db, tmp_path):
 
 
 def test_rate_limit_is_logged_and_backs_off(db, tmp_path):
-    collector= make_collector(
+    collector = make_collector(
         db, tmp_path, lambda request: httpx.Response(429, headers={"Retry-After": "45"})
     )
 
