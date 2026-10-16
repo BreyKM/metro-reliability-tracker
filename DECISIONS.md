@@ -147,6 +147,14 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** No down-migrations. Undoing a change means writing a new migration that reverses it.  
 **Revisit if:** Migrations need features this doesn't support, such as statements that can't run inside a transaction (e.g. `CREATE INDEX CONCURRENTLY`). At that point a tool like Alembic or sqitch is worth it.
 
+## 19. How the collector handles failures and timing
+
+**Date:** 2026-10-16  
+**Decision:** Every fetch outcome gets a poll row: network error, 429, other HTTP errors, invalid protobuf, unchanged snapshot, rejected upsert, or success. Raw snapshots are saved before the database write. A lost database connection is logged and retried on the next tick. Polls stay on a fixed grid, are pushed back by `Retry-After`, and resume from now (no catch-up burst) after falling behind. SIGINT and SIGTERM finish the current poll and exit cleanly.  
+**Why:** Gaps can't be recovered, so the collector must never stop, and every gap needs an explanation in the data. Saving raw first means a failed write can still be rebuilt. Catching up after a sleep would send a burst of requests into a rate limit I've already hit once.  
+**Tradeoff:** While Postgres is unreachable, nothing is fetched or logged to the database, only to the process log. Postgres runs on the same machine, so this should be rare.  
+**Revisit if:** Database outages turn out to be more than rare. Then fetch and save raw snapshots even without a connection, and log the polls once it's back.
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
