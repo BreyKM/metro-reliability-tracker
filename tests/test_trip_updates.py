@@ -43,7 +43,7 @@ def make_feed(*trip_updates):
     return feed.SerializeToString()
 
 
-def test_parse_arrival_and_computes_scheduled_time():
+def test_parses_arrival_and_computes_scheduled_time():
     raw = make_feed(make_trip(stops=[(12, "1234", (1790308930, 130), None)]))
 
     snapshot = parse_trip_updates(raw)
@@ -64,6 +64,7 @@ def test_falls_back_to_departure_when_arrival_missing():
     [p] = parse_trip_updates(raw).predictions
 
     assert p.delay_seconds == 60
+    assert p.predicted_arrival == datetime(2026, 9, 25, 4, 0, tzinfo=UTC)
 
 
 def test_skips_stop_without_delay():
@@ -76,8 +77,28 @@ def test_skips_stop_without_delay():
     assert snapshot.skipped_stops == 1
 
 
+def test_skips_stop_marked_skipped():
+    tu = make_trip(stops=[(1, "1234", (1790308800, 0), None)])
+    stop = tu.stop_time_update[0]
+    stop.schedule_relationship = gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.SKIPPED
+
+    snapshot = parse_trip_updates(make_feed(tu))
+
+    assert snapshot.predictions == []
+    assert snapshot.skipped_stops == 1
+
+
 def test_skips_trip_without_start_date():
     raw = make_feed(make_trip(start_date=None, stops=[(1, "1234", (1790308800, 0), None)]))
+
+    snapshot = parse_trip_updates(raw)
+
+    assert snapshot.predictions == []
+    assert snapshot.skipped_trips == 1
+
+
+def test_skips_trip_with_malformed_start_date():
+    raw = make_feed(make_trip(start_date="2026-09-24", stops=[(1, "1234", (1790308800, 0), None)]))
 
     snapshot = parse_trip_updates(raw)
 
