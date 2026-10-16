@@ -56,7 +56,7 @@ UPSERT_STOP_PREDICTION = """
     ON CONFLICT (service_date, trip_id, stop_sequence) DO UPDATE SET
         predicted_arrival = EXCLUDED.predicted_arrival,
         delay_seconds     = EXCLUDED.delay_seconds,
-        vehicle_id        = EXCLUDED.vehicle_id,
+        vehicle_id        = COALESCE(EXCLUDED.vehicle_id, stop_prediction.vehicle_id),
         last_seen_at      = EXCLUDED.last_seen_at,
         last_poll_id      = EXCLUDED.last_poll_id,
         update_count      = stop_prediction.update_count + 1
@@ -68,7 +68,7 @@ def insert_poll(conn: psycopg.Connection, poll: PollRecord) -> int:
     return conn.execute(INSERT_POLL, asdict(poll)).fetchone()[0]
 
 
-def upsert_stop_prediction(
+def upsert_stop_predictions(
     conn: psycopg.Connection,
     poll_id: int,
     seen_at: datetime,
@@ -101,5 +101,5 @@ def record_trip_updates(
     )
     with conn.transaction():
         poll_id = insert_poll(conn, poll)
-        upsert_stop_prediction(conn, poll_id, snapshot.header_timestamp, snapshot.predictions)
+        upsert_stop_predictions(conn, poll_id, snapshot.header_timestamp, snapshot.predictions)
     return poll_id

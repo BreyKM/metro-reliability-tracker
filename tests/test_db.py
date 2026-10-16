@@ -126,6 +126,17 @@ def test_failed_upsert_writes_nothing(db):
     assert count(db, "stop_prediction") == 0
 
 
+def test_missing_vehicle_keeps_last_known(db):
+    later = SEEN + timedelta(seconds=30)
+    record_trip_updates(db, make_poll(), make_snapshot([make_prediction()]))
+
+    record_trip_updates(
+        db, make_poll(later), make_snapshot([make_prediction(vehicle_id=None)], header=later)
+    )
+
+    assert prediction_row(db)["vehicle_id"] == "2115"
+
+
 def test_records_real_snapshot(db):
     snapshot = parse_trip_updates((FIXTURES / "tripupdates_night.pb").read_bytes())
 
