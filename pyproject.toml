@@ -15,7 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-metro = "metro:main"
+metro-collector = "metro.collector:main"
+metro-migrate = "metro.migrate:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]

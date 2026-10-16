@@ -29,7 +29,7 @@ class TripUpdatesCollector:
         self.client = client
         self.conn = conn
         self.raw_dir = raw_dir
-        self.last_header = datetime | None = None
+        self.last_header: datetime | None = None
 
     def poll_once(self) -> float:
         """Fetch one snapshot and record the outcome, whatever it is.
@@ -127,7 +127,7 @@ def next_tick(previous: float, interval: float, extra_wait: float, now: float) -
 
 def run(settings: Settings) -> None:
     stop = threading.Event()
-    for sig in (signal.SIGINT, signal,SIGTERM):
+    for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
 
     headers = {"Ocp-Apim-Subscription-Key": settings.gtfsrt_key}
@@ -176,7 +176,9 @@ def _ms_since(started: float) -> int:
 
 def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.Formatter.converter = time.gmtime
+    logging.basicConfig(level=logging.INFO, format="%(asctime)sZ %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     run(load_settings())
 
 
