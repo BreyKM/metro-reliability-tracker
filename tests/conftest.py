@@ -28,8 +28,7 @@ def database_url():
 
 @pytest.fixture
 def db(database_url):
-    """A connection to the test database with every table emptied."""
-    with psycopg.connect(database_url) as conn:
+    """An autocommit connection to the test database with every table emptied."""
+    with psycopg.connect(database_url, autocommit=True) as conn:
         conn.execute("TRUNCATE poll, stop_prediction, vehicle_position RESTART IDENTITY")
-        conn.commit()
         yield conn
