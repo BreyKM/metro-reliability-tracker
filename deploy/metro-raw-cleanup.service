@@ -1,4 +1,4 @@
-[unit]
+[Unit]
 Description=Delete raw METRO snapshot folders older than 7 days
 
 [Service]
