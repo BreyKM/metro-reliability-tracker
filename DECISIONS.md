@@ -139,6 +139,14 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** Buses listed on two trips store their position twice (~10% of rows in my sample). Queries have to choose the current trip themselves.  
 **Revisit if:** The current-trip rule is confirmed and the duplicates start to matter for storage.
 
+## 18. Migrations applied by a small runner; tests use a disposable database
+
+**Date:** 2026-10-15  
+**Decision:** `python -m metro.migrate` applies any `migrations/*.sql` file whose version isn't in `schema_migration`, in filename order. Each file keeps its own `BEGIN ... COMMIT` and records its own version; the runner checks that it did. Applied migrations are never edited; changes go in a new file. Tests reset a separate `*_test` database and apply every migration from scratch once per run.  
+**Why:** There are now three databases (local, test, VPS), and applying files by hand doesn't scale. Rebuilding the test schema from nothing on every run proves the migrations produce a working schema on an empty database, which is what the VPS will start from. The `_test` name check keeps the reset from ever touching a database with real data.  
+**Tradeoff:** No down-migrations. Undoing a change means writing a new migration that reverses it.  
+**Revisit if:** Migrations need features this doesn't support, such as statements that can't run inside a transaction (e.g. `CREATE INDEX CONCURRENTLY`). At that point a tool like Alembic or sqitch is worth it.
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
