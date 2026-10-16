@@ -1,0 +1,23 @@
+[Unit]
+Description=Houston METRO TripUpdates collector
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=metro
+Group=metro
+WorkingDirectory=/opt/metro/app
+EnvironmentFile=/opt/metro/app/.env
+ExecStart=/opt/metro/app/.venv/bin/metro-collector
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/metro
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
