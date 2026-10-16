@@ -55,7 +55,7 @@ def parse_trip_updates(raw: bytes) -> ParsedSnapshot:
         except ValueError:
             skipped_trips += 1
             continue
-        
+
         direction_id = trip.direction_id if trip.HasField("direction_id") else None
         vehicle_id = tu.vehicle.id if tu.vehicle.HasField("id") else None
 

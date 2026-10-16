@@ -79,9 +79,8 @@ def test_skips_stop_without_delay():
 
 def test_skips_stop_marked_skipped():
     tu = make_trip(stops=[(1, "1234", (1790308800, 0), None)])
-    tu.stop_time_update[0].schedule_relationship = (
-        gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.SKIPPED
-    )
+    stop = tu.stop_time_update[0]
+    stop.schedule_relationship = gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.SKIPPED
 
     snapshot = parse_trip_updates(make_feed(tu))
 
