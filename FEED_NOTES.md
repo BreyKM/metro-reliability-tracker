@@ -38,7 +38,8 @@ From the 03:39 UTC snapshot:
 | `departure.time`, `departure.delay` | 11,293 / 11,537 |
 
 - Delay and predicted time are both given, so scheduled time = `time − delay`. I haven't checked this against static GTFS yet.
-- The 10 updates with no arrival look like first stops (departure only), and the 244 with no departure look like last stops. So use arrival, and fall back to departure when there's no arrival.
+- The 10 updates with no arrival also have no usable departure (time and delay), so the parser skips them. My first guess was that they were first stops with only a departure;  
+parsing the snapshot showed that's wrong (11,527 predictions, 10 skipped). The 244 with no departure are probably last stops. Arrival is used when present, with a fallback to departure; the fallback didn't trigger on this snapshot.
 - `start_date` is the Houston service date as `YYYYMMDD`. At 03:39 UTC it read `20260924`, which is correct for 10:39 PM local.
 - Every entity was a `trip_update`, and every trip was `SCHEDULED`. None were `CANCELED`, but that snapshot was late at night, so it doesn't show whether cancellations ever appear here.
 - Some trips are in the feed with zero stop time updates: 9 of 237 at night and 18 of 554 in the evening, about 3–4%.
