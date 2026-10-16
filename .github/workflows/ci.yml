@@ -11,6 +11,22 @@ permissions:
 jobs:
     lint-and-test:
         runs-on: ubuntu-latest
+        services:
+          postgres:
+            image: postgres:18
+            env:
+              POSTGRES_USER: metro_app
+              POSTGRES_PASSWORD: ci-only-password
+              POSTGRES_DB: metro_test
+            ports:
+              - 5432:5432
+            options: >-
+              --health-cmd "pg_isready -U metro_app -d metro_test"
+              --health-interval 5s
+              --health-timeout 5s
+              --health-retries 10
+        env:
+          TEST_DATABASE_URL: postgresql://metro_app:ci-only-password@localhost:5432/metro_test
         steps:
             - uses: actions/checkout@v7
 
