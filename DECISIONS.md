@@ -162,6 +162,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** While Postgres is unreachable, nothing is fetched or logged to the database, only to the process log. Postgres runs on the same machine, so this should be rare.  
 **Revisit if:** Database outages turn out to be more than rare. Then fetch and save raw snapshots even without a connection, and log the polls once it's back.
 
+## 20. Deployment layout on the VPS
+
+**Date:** 2026-10-16  
+**Decision:** Postgres 18 runs in Docker Compose (`compose.yaml` in the repo) with its data in a named volume, published only on `127.0.0.1:5432`. The app lives in `/opt/metro/app`, owned by a `metro` system user with no login and no sudo. Secrets are in `/opt/metro/app/.env`, mode 600, shared by Compose and the collector. Docker is installed from Docker's own apt repository, container logs are capped at 3 × 10 MB, and admin commands use `sudo docker` rather than the `docker` group.  
+**Why:** Docker's published ports bypass ufw, so binding to `127.0.0.1` is what keeps the database off the internet; I confirmed it with a TCP test from outside. A volume keeps data across container upgrades. A separate system user limits what a bug in the collector could reach. Membership in the `docker` group is equivalent to root without a password.  
+**Tradeoff:** `POSTGRES_USER` makes `metro_app` a superuser in the container, unlike my local setup where it's a plain owner role. Acceptable while the database is only reachable from the server itself.  
+**Revisit if:** Anything besides the collector needs database access (for example the API), at which point it should get its own limited role.
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
