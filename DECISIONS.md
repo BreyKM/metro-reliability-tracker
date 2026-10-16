@@ -107,6 +107,13 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** A monthly cost, and I'm responsible for server upkeep (updates, SSH, firewall).  
 **Revisit if:** A free always-on option turns out to be reliable enough.
 
+**Update 2026-10-16:** Chose OVHcloud VPS-2 (4 vCore, 8 GB RAM, 75 GB NVMe, US data center):
+- Hetzner raised cloud prices two or three times in 2026 (shared AMD plans by over 100% for new orders) and had nothing in stock.  
+- Oracle's Always Free tier reclaims instances that stay under 20% CPU, network, and memory for 7 days, which describes this collector.  
+- DigitalOcean and Linode charge $12/mo for 1 vCPU and 2 GB RAM, a quarter of the memory.  
+- OVH VPS-1 plus an extra disk was the backup plan, but additional disks aren't covered by OVH's included daily backup. VPS-2 keeps everything on one disk inside that backup.  
+Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't support Docker.
+
 ## 14. Native Postgres locally, Docker on the VPS
 
 **Date:** 2026-09-25  
