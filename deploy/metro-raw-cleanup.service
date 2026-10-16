@@ -5,7 +5,7 @@ Description=Delete raw METRO snapshot folders older than 7 days
 Type=oneshot
 User=metro
 Group=metro
-ExecStart=/usr/bin/find /opt/metro/data/raw - mindepth 2 -maxdepth 2 -type d -mtime +7 -print - exec rm -rf {} +
+ExecStart=/usr/bin/find /opt/metro/data/raw -mindepth 2 -maxdepth 2 -type d -mtime +7 -print -exec rm -rf {} +
 
 NoNewPrivileges=true
 ProtectSystem=strict
