@@ -1,3 +1,5 @@
+"""Turn a GTFS-Realtime TripUpdates snapshot into stop prediction rows."""
+
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
@@ -48,7 +50,12 @@ def parse_trip_updates(raw: bytes) -> ParsedSnapshot:
             skipped_trips += 1
             continue
 
-        service_date = datetime.strptime(trip.start_date, "%Y%m%d").date()
+        try:
+            service_date = datetime.strptime(trip.start_date, "%Y%m%d").date()
+        except ValueError:
+            skipped_trips += 1
+            continue
+        
         direction_id = trip.direction_id if trip.HasField("direction_id") else None
         vehicle_id = tu.vehicle.id if tu.vehicle.HasField("id") else None
 
@@ -88,7 +95,10 @@ def parse_trip_updates(raw: bytes) -> ParsedSnapshot:
 def _usable_event(
     stu: gtfs_realtime_pb2.TripUpdate.StopTimeUpdate,
 ) -> gtfs_realtime_pb2.TripUpdate.StopTimeEvent | None:
-
+    """Only scheduled stops count. Prefer the arrival; fall back to the departure.
+    Both time and delay must be present."""
+    if stu.schedule_relationship != gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.SCHEDULED:
+        return None
     for name in ("arrival", "departure"):
         if stu.HasField(name):
             event = getattr(stu, name)
