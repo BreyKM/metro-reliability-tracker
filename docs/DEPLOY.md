@@ -219,7 +219,7 @@ ORDER BY requested_at DESC LIMIT 20;
 cd /opt/metro/app
 sudo rclone --config /etc/metro/rclone.conf copy b2backup:B2_BUCKET/daily /tmp/restore-test --max-age 2d
 sudo docker compose exec postgres createdb -U metro_app metro_restore_test
-sudo docker compose exec -T postgres pg_restore -U metro_app -d metro_restore_test --no-owner < /tmp/restore-test/metro-<STAMP>.dump
+sudo docker compose exec -T postgres pg_restore -U metro_app -d metro_restore_test --no-owner < /tmp/restore-test/metro-YYYY-MM-DDTHHMMSSZ.dump.dump
 ```
 
 Compare `count(*)` of `poll` and `stop_prediction` with the live database, then:
@@ -231,13 +231,19 @@ sudo rm -rf /tmp/restore-test
 
 ### Rebuild onto a new server
 
+> **Only on a new server with an empty database.** Never run these steps on the live server. To check a backup there, use "Test a backup" above.
+
 1. Sections 1–3, but **skip `metro-migrate`**.
-2. Download the newest dump and restore into the empty `metro` database:
+2. Set up rclone as in section 6 (install it and create `/etc/metro/rclone.conf` and `backup.env`), then download the newest dump:
    ```bash
-   sudo docker compose exec -T postgres pg_restore -U metro_app -d metro --no-owner < metro-<STAMP>.dump
+   sudo rclone --config /etc/metro/rclone.conf copy b2backup:B2_BUCKET/daily /tmp/restore --max-age 2d
    ```
-3. Run `metro-migrate` to apply any migrations newer than the backup.
-4. Sections 4–6.
+3. Restore it into the empty `metro` database:
+   ```bash
+   sudo docker compose exec -T postgres pg_restore -U metro_app -d metro --no-owner < /tmp/restore/metro-YYYY-MM-DDTHHMMSSZ.dump
+   ```
+4. Run `metro-migrate` to apply any migrations newer than the backup.
+5. Sections 4–6 (skipping the rclone setup already done).
 
 Data between the last backup and the rebuild is lost and shows as a gap in `poll`.
 
