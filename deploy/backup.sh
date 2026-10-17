@@ -27,3 +27,8 @@ rclone --config "$RCLONE_CONFIG" copy "$file" "$REMOTE"
 echo "uploaded to $REMOTE"
 
 find "$BACKUP_DIR" -name 'metro-*.dump' -mtime +"$KEEP_LOCAL_DAYS" -print -delete
+
+if [[ -n "${BACKUP_HEALTHCHECK_URL:-}" ]]; then
+    curl -fsS -m 10 --retry 3 "$BACKUP_HEALTHCHECK_URL" > /dev/null \
+        || echo "health check ping failed"
+fi

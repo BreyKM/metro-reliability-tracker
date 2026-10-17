@@ -158,6 +158,18 @@ systemctl list-timers 'metro-*'
 
 The script runs as root from a root-owned copy, not from the repo, because the repo is writable by `metro`.
 
+## 7. Monitoring
+
+healthchecks.io has two checks:
+- `metro-collector`: period 1 minute, grace 10 minutes. The collector pings it after recording a new snapshot (at most once a minute).
+- `metro-backup`: period 1 day, grace 2 hours. `backup.sh` pings it after a successful upload.
+
+Add the ping URLs (secret; anyone with them can ping):
+- `HEALTHCHECK_URL=...` in `/opt/metro/app/.env`, then `sudo systemctl restart metro-collector`
+- `BACKUP_HEALTHCHECK_URL=...` in `/etc/metro/backup.env`, then reinstall the script (`sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup`)
+
+The collector logs `health check pings on` at startup when the URL is set.
+
 ## Routine operations
 
 ### Deploy a code change

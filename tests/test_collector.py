@@ -87,3 +87,79 @@ def test_next_tick_honors_retry_after():
 
 def test_next_tick_does_not_burst_after_falling_behind():
     assert next_tick(previous=100.0, interval=30, extra_wait=0, now=500.0) == 500.0
+
+
+class PingRecorder:
+    """A fake health check endpoint that remembers every request."""
+
+    def __init__(self):
+        self.requests = []
+
+    def __call__(self, request):
+        self.requests.append(request)
+        return httpx.Response(200)
+
+
+def make_monitored_collector(db, tmp_path, feed_handler, ping_handler):
+    client = httpx.Client(
+        transport=httpx.MockTransport(feed_handler),
+        headers={"Ocp-Apim=Subscription-Key": "metro-secret"},
+    )
+    ping_client = httpx.Client(transport=httpx.MockTransport(ping_handler))
+    return TripUpdatesCollector(
+        client, db, tmp_path, ping_client=ping_client, healthcheck_url="https://hc.example/ping"
+    )
+
+
+def test_pings_after_recording_a_new_snapshot(db, tmp_path):
+    pings = PingRecorder()
+    collector = make_monitored_collector(
+        db, tmp_path, lambda request: httpx.Response(200, content=FIXTURE), pings
+    )
+
+    collector.poll_once()
+
+    [ping] = pings.requests
+    assert str(ping.url) == "https://hc.example/ping"
+    assert "ocp-apim-subscription-key" not in ping.headers
+
+
+def test_failed_poll_does_not_ping(db, tmp_path):
+    pings = PingRecorder()
+    collector = make_monitored_collector(
+        db, tmp_path, lambda request: httpx.Response(429, headers={"Retry-After": "45"}), pings
+    )
+
+    collector.poll_once()
+
+    assert pings.requests == []
+
+
+def test_pings_at_most_once_per_interval(db, tmp_path):
+    pings = PingRecorder()
+    collector = make_monitored_collector(
+        db, tmp_path, lambda request: httpx.Response(200, content=FIXTURE), pings
+    )
+
+    collector.poll_once()
+    collector.last_header = None  # treat the same fixture as a new snapshot
+    collector.poll_once()
+    assert len(pings.requests) == 1
+
+    collector._last_ping -= 61  # pretend a minute has passed
+    collector.last_header = None
+    collector.poll_once()
+    assert len(pings.requests) == 2
+
+
+def test_ping_failure_does_not_stop_recording(db, tmp_path):
+    def broken_monitor(request):
+        raise httpx.ConnectError("monitor unreachable", request=request)
+
+    collector = make_monitored_collector(
+        db, tmp_path, lambda request: httpx.Response(200, content=FIXTURE), broken_monitor
+    )
+
+    assert collector.poll_once() == 0
+
+    assert polls(db) == [(200, False, 11_527, None)]
