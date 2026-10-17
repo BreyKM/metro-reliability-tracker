@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up the metro database to Backblaze B2
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/metro/backup.env
+ExecStart=/usr/local/sbin/metro-backup
+PrivateTmp=true
+NoNewPrivileges=true
