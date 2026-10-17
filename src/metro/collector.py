@@ -20,16 +20,27 @@ from metro.trip_updates import parse_trip_updates
 
 TRIP_UPDATES_URL = "https://api.ridemetro.org/GtfsRealtime/TripUpdates"
 FEED = "trip_updates"
+PING_INTERVAL_SECONDS = 60
 
 log = logging.getLogger(__name__)
 
 
 class TripUpdatesCollector:
-    def __init__(self, client: httpx.Client, conn: psycopg.Connection | None, raw_dir: Path):
+    def __init__(
+        self,
+        client: httpx.Client,
+        conn: psycopg.Connection | None,
+        raw_dir: Path,
+        ping_client: httpx.Client | None = None,
+        healthcheck_url: str | None = None,
+    ):
         self.client = client
         self.conn = conn
         self.raw_dir = raw_dir
+        self.ping_client = ping_client
+        self.healthcheck_url = healthcheck_url
         self.last_header: datetime | None = None
+        self._last_ping: float | None = None
 
     def poll_once(self) -> float:
         """Fetch one snapshot and record the outcome, whatever it is.
@@ -94,6 +105,7 @@ class TripUpdatesCollector:
             return 0.0
 
         self.last_header = snapshot.header_timestamp
+        self._ping()
         log.info(
             "recorded %s: %d rows in %d ms",
             snapshot.header_timestamp.isoformat(),
@@ -119,6 +131,20 @@ class TripUpdatesCollector:
         except OSError:
             log.exception("could not save raw snapshot %s", path)
 
+    def _ping(self) -> None:
+        """Tell the external monitor a new snapshot was recorded. Never raises."""
+        if self.ping_client is None or self.healthcheck_url is None:
+            return
+        now = time.monotonic()
+        if self._last_ping is not None and now - self._last_ping < PING_INTERVAL_SECONDS:
+            return
+        try:
+            self.ping_client.get(self.healthcheck_url)
+        except httpx.HTTPError as exc:
+            log.warning("health check ping failed: %s", exc)
+            return
+        self._last_ping = now
+
 
 def next_tick(previous: float, interval: float, extra_wait: float, now: float) -> float:
     """Schedule the next poll on a fixed grid, pushed back if the API asked us to wait.
@@ -138,10 +164,20 @@ def run(settings: Settings) -> None:
         signal.signal(sig, lambda *_: stop.set())
 
     headers = {"Ocp-Apim-Subscription-Key": settings.gtfsrt_key}
-    with httpx.Client(headers=headers, timeout=settings.request_timeout_seconds) as client:
-        collector = TripUpdatesCollector(client, conn=None, raw_dir=settings.raw_dir)
+    with (
+        httpx.Client(headers=headers, timeout=settings.request_timeout_seconds) as client,
+        httpx.Client(timeout=5.0) as ping_client,
+    ):
+        collector = TripUpdatesCollector(
+            client,
+            conn=None,
+            raw_dir=settings.raw_dir,
+            ping_client=ping_client,
+            healthcheck_url=settings.healthcheck_url,
+        )
         tick = time.monotonic()
         log.info("polling every %.0f s", settings.poll_interval_seconds)
+        log.info("health check pings %s", "on" if settings.healthcheck_url else "off")
 
         while not stop.is_set():
             extra_wait = 0.0

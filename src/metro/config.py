@@ -12,6 +12,7 @@ class Settings:
     poll_interval_seconds: float = 30.0
     request_timeout_seconds: float = 15.0
     raw_dir: Path = Path("data/raw")
+    healthcheck_url: str | None = None
 
 
 def load_settings() -> Settings:
@@ -24,4 +25,5 @@ def load_settings() -> Settings:
         poll_interval_seconds=float(os.environ.get("POLL_INTERVAL_SECONDS", 30)),
         request_timeout_seconds=float(os.environ.get("REQUEST_TIMEOUT_SECONDS", 15)),
         raw_dir=Path(os.environ.get("RAW_DIR", "data/raw")),
+        healthcheck_url=os.environ.get("HEALTHCHECK_URL") or None,
     )
