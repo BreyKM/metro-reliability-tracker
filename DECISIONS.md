@@ -107,6 +107,13 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** A monthly cost, and I'm responsible for server upkeep (updates, SSH, firewall).  
 **Revisit if:** A free always-on option turns out to be reliable enough.
 
+**Update 2026-10-16:** Chose OVHcloud VPS-2 (4 vCore, 8 GB RAM, 75 GB NVMe, US data center):
+- Hetzner raised cloud prices two or three times in 2026 (shared AMD plans by over 100% for new orders) and had nothing in stock.  
+- Oracle's Always Free tier reclaims instances that stay under 20% CPU, network, and memory for 7 days, which describes this collector.  
+- DigitalOcean and Linode charge $12/mo for 1 vCPU and 2 GB RAM, a quarter of the memory.  
+- OVH VPS-1 plus an extra disk was the backup plan, but additional disks aren't covered by OVH's included daily backup. VPS-2 keeps everything on one disk inside that backup.  
+Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't support Docker.
+
 ## 14. Native Postgres locally, Docker on the VPS
 
 **Date:** 2026-09-25  
@@ -154,6 +161,22 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Why:** Gaps can't be recovered, so the collector must never stop, and every gap needs an explanation in the data. Saving raw first means a failed write can still be rebuilt. Catching up after a sleep would send a burst of requests into a rate limit I've already hit once.  
 **Tradeoff:** While Postgres is unreachable, nothing is fetched or logged to the database, only to the process log. Postgres runs on the same machine, so this should be rare.  
 **Revisit if:** Database outages turn out to be more than rare. Then fetch and save raw snapshots even without a connection, and log the polls once it's back.
+
+## 20. Deployment layout on the VPS
+
+**Date:** 2026-10-16  
+**Decision:** Postgres 18 runs in Docker Compose (`compose.yaml` in the repo) with its data in a named volume, published only on `127.0.0.1:5432`. The app lives in `/opt/metro/app`, owned by a `metro` system user with no login and no sudo. Secrets are in `/opt/metro/app/.env`, mode 600, shared by Compose and the collector. Docker is installed from Docker's own apt repository, container logs are capped at 3 × 10 MB, and admin commands use `sudo docker` rather than the `docker` group.  
+**Why:** Docker's published ports bypass ufw, so binding to `127.0.0.1` is what keeps the database off the internet; I confirmed it with a TCP test from outside. A volume keeps data across container upgrades. A separate system user limits what a bug in the collector could reach. Membership in the `docker` group is equivalent to root without a password.  
+**Tradeoff:** `POSTGRES_USER` makes `metro_app` a superuser in the container, unlike my local setup where it's a plain owner role. Acceptable while the database is only reachable from the server itself.  
+**Revisit if:** Anything besides the collector needs database access (for example the API), at which point it should get its own limited role.
+
+## 21. Nightly database backups to Backblaze B2
+
+**Date:** 2026-10-16  
+**Decision:** A root systemd timer runs `pg_dump --format=custom` inside the Postgres container at 08:00 UTC, checks the dump with `pg_restore --list`, keeps 3 days locally, and uploads it to a private Backblaze B2 bucket. A bucket lifecycle rule deletes uploads after about 30 days. The B2 key is limited to that one bucket and stored in root-only `/etc/metro/`. The script runs from a root-owned copy in `/usr/local/sbin`, not from the repo checkout. I restored a downloaded backup into a scratch database and matched its row counts against the live database.  
+**Why:** The collected data can't be re-collected, and OVH's included backup is stored with the same provider. B2 costs $6.95/TB/month with 10 GB free, and downloads are free up to 3× storage, which covers occasional restores. Cloudflare R2 has free downloads but charges about twice as much for storage. Running root-executed code from a folder the `metro` user can write would let a compromised collector become root.  
+**Tradeoff:** Up to a day of data could be lost (the time since the last backup). The key can delete files in its bucket, so a compromised server could erase backups.  
+**Revisit if:** The dataset becomes valuable enough to need less than a day of loss (then use continuous WAL archiving), or to justify an upload-only key so the server can't delete backups. 
 
 ## Not decided yet
 

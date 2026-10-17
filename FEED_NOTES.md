@@ -14,6 +14,10 @@ What I've found by probing METRO's APIs directly. Numbers come from specific sna
 - There's no GTFS-RT VehiclePositions feed. `GtfsRealtime/VehiclePositions` returns 404, and Transitland only lists TripUpdates and Alerts.
 - The Transit Data responses reference `api.transitiq.com`, so METRO gets this data from a vendor, TransitIQ.
 
+## Dataset
+
+Continuous collection on the VPS started **2026-10-16 21:58:33 UTC** (Fri 4:58 PM Houston). Earlier rows in `poll` came from a foreground test run.
+
 ## TripUpdates
 
 ### Snapshots
