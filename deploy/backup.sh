@@ -10,7 +10,7 @@ KEEP_LOCAL_DAYS=3
 
 stamp=$(date -u +%Y-%m-%dT%H%M%SZ)
 file="$BACKUP_DIR/metro-$stamp.dump"
-trap= 'rm -f "$file.tmp"' ERR
+trap 'rm -f "$file.tmp"' ERR
 
 mkdir -p "$BACKUP_DIR"
 
@@ -20,7 +20,7 @@ docker compose -f "$COMPOSE_FILE" exec -T postgres \
 docker compose -f "$COMPOSE_FILE" exec -T postgres \
     pg_restore --list > /dev/null < "$file.tmp"
 
-mv "$fille.tmp" "$file"
+mv "$file.tmp" "$file"
 echo "dumped $(du -h "$file" | cut -f1) to $file"
 
 rclone --config "$RCLONE_CONFIG" copy "$file" "$REMOTE"
