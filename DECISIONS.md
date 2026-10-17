@@ -170,6 +170,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** `POSTGRES_USER` makes `metro_app` a superuser in the container, unlike my local setup where it's a plain owner role. Acceptable while the database is only reachable from the server itself.  
 **Revisit if:** Anything besides the collector needs database access (for example the API), at which point it should get its own limited role.
 
+## 21. Nightly database backups to Backblaze B2
+
+**Date:** 2026-10-16  
+**Decision:** A root systemd timer runs `pg_dump --format=custom` inside the Postgres container at 08:00 UTC, checks the dump with `pg_restore --list`, keeps 3 days locally, and uploads it to a private Backblaze B2 bucket. A bucket lifecycle rule deletes uploads after about 30 days. The B2 key is limited to that one bucket and stored in root-only `/etc/metro/`. The script runs from a root-owned copy in `/usr/local/sbin`, not from the repo checkout. I restored a downloaded backup into a scratch database and matched its row counts against the live database.  
+**Why:** The collected data can't be re-collected, and OVH's included backup is stored with the same provider. B2 costs $6.95/TB/month with 10 GB free, and downloads are free up to 3× storage, which covers occasional restores. Cloudflare R2 has free downloads but charges about twice as much for storage. Running root-executed code from a folder the `metro` user can write would let a compromised collector become root.  
+**Tradeoff:** Up to a day of data could be lost (the time since the last backup). The key can delete files in its bucket, so a compromised server could erase backups.  
+**Revisit if:** The dataset becomes valuable enough to need less than a day of loss (then use continuous WAL archiving), or to justify an upload-only key so the server can't delete backups. 
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
