@@ -111,6 +111,10 @@ So the limit is somewhere between about 6 and 12 requests a minute, or it's a bu
 - Positions are always at least ~26 s old when they reach me. That's either the buses' reporting interval or lag in the vendor's pipeline. At city bus speeds a bus moves a few hundred meters in that time, so working out arrivals from GPS will mean estimating between positions, not waiting for a point right at the stop.
 - Some buses stay in the response long after they stop reporting (13 minutes in this snapshot). Arrival detection needs a staleness cutoff.
 
+### Rows without a GPS fix
+
+Every saved response (5 of 5) has 3–5 rows at exactly `0, 0` (in the Atlantic, so not a real position). Those rows also have report times 6–13 minutes older than the rest of the snapshot, and some have implausible delays (up to 4,062 s). The parser skips them and counts them as `no_fix_rows`. The 775 s max report age noted above came from one of these rows.
+
 ### Field quirks
 
 - **The `*Local` time fields end in `Z` but are Houston time.** `TripStartTimeLocal` was `21:24:00Z` while `TripStartTimeUTC` was `02:24:00Z`. Only use the `*UTC` fields.
