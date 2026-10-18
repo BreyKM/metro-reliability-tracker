@@ -3,14 +3,14 @@ from pathlib import Path
 
 import httpx
 
-from metro.collector import TripUpdatesCollector, next_tick
+from metro.collector import TRIP_UPDATES, FeedCollector, next_tick
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "tripupdates_night.pb").read_bytes()
 
 
 def make_collector(db, tmp_path, handler):
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return TripUpdatesCollector(client, db, tmp_path)
+    return FeedCollector(TRIP_UPDATES, client, db, tmp_path)
 
 
 def polls(db):
@@ -106,8 +106,13 @@ def make_monitored_collector(db, tmp_path, feed_handler, ping_handler):
         headers={"Ocp-Apim=Subscription-Key": "metro-secret"},
     )
     ping_client = httpx.Client(transport=httpx.MockTransport(ping_handler))
-    return TripUpdatesCollector(
-        client, db, tmp_path, ping_client=ping_client, healthcheck_url="https://hc.example/ping"
+    return FeedCollector(
+        TRIP_UPDATES,
+        client,
+        db,
+        tmp_path,
+        ping_client=ping_client,
+        healthcheck_url="https://hc.example/ping",
     )
 
 
@@ -142,12 +147,12 @@ def test_pings_at_most_once_per_interval(db, tmp_path):
     )
 
     collector.poll_once()
-    collector.last_header = None  # treat the same fixture as a new snapshot
+    collector.last_marker = None  # treat the same fixture as a new snapshot
     collector.poll_once()
     assert len(pings.requests) == 1
 
     collector._last_ping -= 61  # pretend a minute has passed
-    collector.last_header = None
+    collector.last_marker = None
     collector.poll_once()
     assert len(pings.requests) == 2
 
