@@ -186,6 +186,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** It depends on a third-party service, and the ping URLs are secrets to manage. A real outage shorter than 11 minutes won't alert.  
 **Revisit if:** I need alerts on other signals (slow polls, disk filling up). healthchecks.io can receive those too, or a full metrics setup would.
 
+## 23. One collector process per feed
+
+**Date:** 2026-10-17  
+**Decision:** The collector runs one feed per process, chosen by a command-line argument (`metro-collector vehicles`). Each feed is described by a `Feed` spec (URL, parser, change marker, record function), and the polling loop is shared. Each feed gets its own systemd service and its own health check.  
+**Why:** The feeds come from separate API products with separate keys and probably separate rate limits. Separate processes mean a slow or failing Vehicles API can't delay TripUpdates polls, and an alert says which feed stopped. Sharing the loop keeps the failure handling and scheduling (#6, #19) in one tested place.  
+**Tradeoff:** Two services to deploy and watch instead of one, and the polls of the two feeds aren't aligned in time.  
+**Revisit if:** An analysis needs both feeds sampled at the same instant, which would favor one loop polling both.  
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
