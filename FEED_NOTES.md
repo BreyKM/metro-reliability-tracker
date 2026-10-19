@@ -18,6 +18,8 @@ What I've found by probing METRO's APIs directly. Numbers come from specific sna
 
 Continuous collection on the VPS started **2026-10-16 21:58:33 UTC** (Fri 4:58 PM Houston). Earlier rows in `poll` came from a foreground test run.
 
+Vehicles collection started **2026-10-19 07:14:16 UTC** (Mon 2:14 AM Houston), as a separate service.
+
 ## TripUpdates
 
 ### Snapshots
