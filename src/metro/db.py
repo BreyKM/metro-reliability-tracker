@@ -6,6 +6,7 @@ from datetime import datetime
 import psycopg
 
 from metro.trip_updates import ParsedSnapshot, StopPrediction
+from metro.vehicles import ParsedVehicles, VehiclePosition
 
 
 @dataclass(frozen=True)
@@ -26,16 +27,18 @@ class PollRecord:
     skipped_trips: int | None = None
     skipped_rows: int | None = None
     duplicate_rows: int | None = None
+    no_fix_rows: int | None = None
 
 
 INSERT_POLL = """
     INSERT INTO poll (
         feed, requested_at, duration_ms, http_status, header_timestamp, entity_count, bytes,
-        skipped_unchanged, error, row_count, skipped_trips, skipped_rows, duplicate_rows
+        skipped_unchanged, error, row_count, skipped_trips, skipped_rows, duplicate_rows, 
+        no_fix_rows
     ) VALUES (
         %(feed)s, %(requested_at)s, %(duration_ms)s, %(http_status)s, %(header_timestamp)s,
         %(entity_count)s, %(bytes)s, %(skipped_unchanged)s, %(error)s, %(row_count)s,
-        %(skipped_trips)s, %(skipped_rows)s, %(duplicate_rows)s
+        %(skipped_trips)s, %(skipped_rows)s, %(duplicate_rows)s, %(no_fix_rows)s
     )
     RETURNING poll_id
 """
@@ -102,4 +105,51 @@ def record_trip_updates(
     with conn.transaction():
         poll_id = insert_poll(conn, poll)
         upsert_stop_predictions(conn, poll_id, snapshot.header_timestamp, snapshot.predictions)
+    return poll_id
+
+
+INSERT_VEHICLE_POSITION = """
+    INSERT INTO vehicle_position (
+        vehicle_id, reported_at, trip_id, route_id,
+        latitude, longitude, delay_seconds, is_monitored, poll_id
+        ) VALUES (
+            %(vehicle_id)s, %(reported_at)s, %(trip_id)s, %(route_id)s,
+            %(latitude)s, %(longitude)s, %(delay_seconds)s, %(is_monitored)s, %(poll_id)s
+        )
+        ON CONFLICT DO NOTHING
+"""
+
+
+def insert_vehicle_positions(
+    conn: psycopg.Connection, poll_id: int, positions: list[VehiclePosition]
+) -> None:
+    if not positions:
+        return
+    params = [{**asdict(p), "poll_id": poll_id} for p in positions]
+    with conn.cursor() as cur:
+        cur.executemany(INSERT_VEHICLE_POSITION, params)
+
+
+def record_vehicles(conn: psycopg.Connection, poll: PollRecord, parsed: ParsedVehicles) -> int:
+    """Log the poll and insert its positions in one transaction.
+
+    Positions already stored (same vehicle, report time, and trip) are skipped, so
+    vehicle_position.poll_id is the poll that first saw each position. A paginated
+    response is recorded, with a warning in poll.error, because positions are missing.
+    """
+    poll = replace(
+        poll,
+        header_timestamp=parsed.newest_report,
+        entity_count=parsed.entity_count,
+        row_count=len(parsed.positions),
+        skipped_rows=parsed.skipped_rows,
+        duplicate_rows=parsed.duplicate_rows,
+        no_fix_rows=parsed.no_fix_rows,
+        error="paginated response; positions after the first page are missing"
+        if parsed.truncated
+        else None,
+    )
+    with conn.transaction():
+        poll_id = insert_poll(conn, poll)
+        insert_vehicle_positions(conn, poll_id, parsed.positions)
     return poll_id

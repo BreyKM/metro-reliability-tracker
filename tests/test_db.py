@@ -6,8 +6,9 @@ import pytest
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from metro.db import PollRecord, insert_poll, record_trip_updates
+from metro.db import PollRecord, insert_poll, record_trip_updates, record_vehicles
 from metro.trip_updates import ParsedSnapshot, StopPrediction, parse_trip_updates
+from metro.vehicles import ParsedVehicles, VehiclePosition, parse_vehicles
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SEEN = datetime(2026, 9, 25, 3, 39, tzinfo=UTC)
@@ -149,3 +150,74 @@ def test_records_real_snapshot(db):
         (poll_id,),
     ).fetchone()
     assert poll == (11_527, 10, 251, SEEN)
+
+
+def make_position(**overrides):
+    values = dict(
+        vehicle_id="2450",
+        reported_at=SEEN,
+        trip_id="Ho414_4620_12062917",
+        route_id="Ho414_4620_073",
+        latitude=29.66625,
+        longitude=95.32095,
+        delay_seconds=-18,
+        is_monitored=True,
+    )
+    values.update(overrides)
+    return VehiclePosition(**values)
+
+
+def make_vehicles(positions, no_fix=0, truncated=False):
+    return ParsedVehicles(
+        entity_count=len(positions) + no_fix,
+        positions=positions,
+        newest_report=max((p.reported_at for p in positions), default=None),
+        skipped_rows=0,
+        no_fix_rows=no_fix,
+        duplicate_rows=0,
+        truncated=truncated,
+    )
+
+
+def make_vehicles_poll():
+    return PollRecord(feed="vehicles", requested_at=SEEN + timedelta(seconds=30), http_status=200)
+
+
+def test_records_vehicle_positions(db):
+    poll_id = record_vehicles(db, make_vehicles_poll(), make_vehicles([make_position()], no_fix=2))
+
+    assert count(db, "vehicle_position") == 1
+    row = db.execute(
+        "SELECT row_count, no_fix_rows, header_timestamp, error FROM poll WHERE poll_id = %s",
+        (poll_id,),
+    ).fetchone()
+    assert row == (1, 2, SEEN, None)
+
+
+def test_same_position_twice_is_stored_once(db):
+    parsed = make_vehicles([make_position()])
+
+    first_poll = record_vehicles(db, make_vehicles_poll(), parsed)
+    record_vehicles(db, make_vehicles_poll(), parsed)
+
+    assert count(db, "vehicle_position") == 1
+    assert db.execute("SELECT poll_id FROM vehicle_position").fetchone()[0] == first_poll
+    assert count(db, "poll") == 2
+
+
+def test_paginated_response_is_recorded_with_a_warning(db):
+    poll_id = record_vehicles(
+        db, make_vehicles_poll(), make_vehicles([make_position()], truncated=True)
+    )
+
+    error = db.execute("SELECT error FROM poll WHERE poll_id = %s", (poll_id,)).fetchone()[0]
+    assert "paginated" in error
+    assert count(db, "vehicle_position") == 1
+
+
+def test_records_real_vehicles_snapshot(db):
+    parsed = parse_vehicles((FIXTURES / "vehicles_evening.json").read_bytes())
+
+    record_vehicles(db, make_vehicles_poll(), parsed)
+
+    assert count(db, "vehicle_position") == 361
