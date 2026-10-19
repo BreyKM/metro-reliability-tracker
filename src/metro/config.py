@@ -7,6 +7,7 @@ from pathlib import Path
 # Which environment variables hold each feed's API key and health check URL.
 FEED_ENV = {
     "trip_updates": ("METRO_GTFSRT_KEY", "HEALTHCHECK_URL"),
+    "vehicles": ("METRO_TRANSIT_DATA_KEY", "VEHICLES_HEALTHCHECK_URL"),
 }
 
 

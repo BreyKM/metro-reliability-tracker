@@ -7,6 +7,7 @@ How the production server is set up and run. Following this top to bottom on a f
 | Piece | How it runs | Location |
 |---|---|---|
 | Collector | systemd service `metro-collector`, as user `metro` | `/opt/metro/app` |
+| Vehicles collector | systemd service metro-vehicles, as user metro | same code, `metro-collector vehicles` |
 | Postgres 18 | Docker Compose, named volume `pgdata`, bound to `127.0.0.1:5432` | `/opt/metro/app/compose.yaml` |
 | Raw snapshots | written by the collector, gzipped, one folder per UTC day | `/opt/metro/data/raw` |
 | Raw cleanup | systemd timer `metro-raw-cleanup`, daily 09:00 UTC, keeps ~8 days | `deploy/metro-raw-cleanup.*` |
@@ -100,17 +101,19 @@ sudo -u metro -H .venv/bin/metro-migrate
 
 Run git in `/opt/metro/app` as `metro` (`sudo -u metro git ...`). As any other user, git refuses with "dubious ownership."
 
-## 4. Start the collector
+## 4. Start the collectors
+
+One service per feed, running the same code (decision #23):
 
 ```bash
-sudo cp deploy/metro-collector.service /etc/systemd/system/
-sudo systemd-analyze verify /etc/systemd/system/metro-collector.service
+sudo cp deploy/metro-collector.service deploy/metro-vehicles.service /etc/systemd/system/
+sudo systemd-analyze verify /etc/systemd/system/metro-collector.service /etc/systemd/system/metro-vehicles.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now metro-collector
-sudo journalctl -u metro-collector -f
+sudo systemctl enable --now metro-collector metro-vehicles
+sudo journalctl -u metro-collector -u metro-vehicles -f
 ```
 
-Expect a `recorded ... rows in N ms` line every 30 seconds.
+Expect a `recorded trip_updates ...` and a `recorded vehicles ...` line about every 30 seconds.
 
 ## 5. Raw snapshot cleanup
 
@@ -160,15 +163,17 @@ The script runs as root from a root-owned copy, not from the repo, because the r
 
 ## 7. Monitoring
 
-healthchecks.io has two checks:
-- `metro-collector`: period 1 minute, grace 10 minutes. The collector pings it after recording a new snapshot (at most once a minute).
+healthchecks.io has three checks:
+- `metro-collector`: period 1 minute, grace 10 minutes. The TripUpdates collector pings it after recording a new snapshot (at most once a minute).
+- `metro-vehicles`: period 1 minute, grace 10 minutes. The Vehicles collector pings it the same way.
 - `metro-backup`: period 1 day, grace 2 hours. `backup.sh` pings it after a successful upload.
 
 Add the ping URLs (secret; anyone with them can ping):
 - `HEALTHCHECK_URL=...` in `/opt/metro/app/.env`, then `sudo systemctl restart metro-collector`
+- `VEHICLES_HEALTHCHECK_URL=...` in `/opt/metro/app/.env`, then `sudo systemctl restart metro-vehicles`
 - `BACKUP_HEALTHCHECK_URL=...` in `/etc/metro/backup.env`, then reinstall the script (`sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup`)
 
-The collector logs `health check pings on` at startup when the URL is set.
+Each collector logs `health check pings on` at startup when its URL is set.
 
 ## Routine operations
 
@@ -210,6 +215,7 @@ sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backu
 
 ```bash
 systemctl status metro-collector
+systemctl status metro-vehicles
 systemctl list-timers 'metro-*'
 df -h /
 sudo du -sh /opt/metro/data/raw /opt/metro/backups

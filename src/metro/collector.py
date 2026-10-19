@@ -18,8 +18,9 @@ from dotenv import load_dotenv
 from google.protobuf.message import DecodeError
 
 from metro.config import Settings, load_settings
-from metro.db import PollRecord, insert_poll, record_trip_updates
+from metro.db import PollRecord, insert_poll, record_trip_updates, record_vehicles
 from metro.trip_updates import parse_trip_updates
+from metro.vehicles import parse_vehicles
 
 PING_INTERVAL_SECONDS = 60
 
@@ -51,7 +52,18 @@ TRIP_UPDATES = Feed(
     row_count=lambda snapshot: len(snapshot.predictions),
 )
 
-FEEDS = {feed.name: feed for feed in (TRIP_UPDATES,)}
+VEHICLES = Feed(
+    name="vehicles",
+    url="https://api.ridemetro.org/data/Vehicles",
+    raw_suffix=".json.gz",
+    parse=parse_vehicles,
+    parse_errors=(ValueError,),
+    marker=lambda parsed: parsed.newest_report,
+    record=record_vehicles,
+    row_count=lambda parsed: len(parsed.positions),
+)
+
+FEEDS = {feed.name: feed for feed in (TRIP_UPDATES, VEHICLES)}
 
 
 class FeedCollector:

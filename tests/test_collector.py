@@ -3,7 +3,7 @@ from pathlib import Path
 
 import httpx
 
-from metro.collector import TRIP_UPDATES, FeedCollector, next_tick
+from metro.collector import TRIP_UPDATES, VEHICLES, FeedCollector, next_tick
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "tripupdates_night.pb").read_bytes()
 
@@ -168,3 +168,54 @@ def test_ping_failure_does_not_stop_recording(db, tmp_path):
     assert collector.poll_once() == 0
 
     assert polls(db) == [(200, False, 11_527, None)]
+
+
+VEHICLES_FIXTURE = (Path(__file__).parent / "fixtures" / "vehicles_evening.json").read_bytes()
+
+
+def make_vehicles_collector(db, tmp_path, handler):
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    return FeedCollector(VEHICLES, client, db, tmp_path)
+
+
+def vehicles_polls(db):
+    return db.execute(
+        "SELECT feed, http_status, skipped_unchanged, row_count, no_fix_rows, error"
+        " FROM poll ORDER BY poll_id"
+    ).fetchall()
+
+
+def test_vehicles_snapshot_is_recorded_and_saved(db, tmp_path):
+    collector = make_vehicles_collector(
+        db, tmp_path, lambda request: httpx.Response(200, content=VEHICLES_FIXTURE)
+    )
+
+    collector.poll_once()
+
+    assert vehicles_polls(db) == [("vehicles", 200, False, 361, 5, None)]
+    [saved] = tmp_path.rglob("*.json.gz")
+    assert saved.parent.parent.name == "vehicles"
+    assert gzip.decompress(saved.read_bytes()) == VEHICLES_FIXTURE
+
+
+def test_unchanged_vehicles_snapshot_is_skipped(db, tmp_path):
+    collector = make_vehicles_collector(
+        db, tmp_path, lambda request: httpx.Response(200, content=VEHICLES_FIXTURE)
+    )
+
+    collector.poll_once()
+    collector.poll_once()
+
+    assert vehicles_polls(db)[1] == ("vehicles", 200, True, None, None, None)
+
+
+def test_invalid_vehicles_json_is_logged(db, tmp_path):
+    collector = make_vehicles_collector(
+        db, tmp_path, lambda request: httpx.Response(200, content=b"<html>error</html>")
+    )
+
+    collector.poll_once()
+
+    [(feed, status, _, row_count, _, error)] = vehicles_polls(db)
+    assert (feed, status, row_count) == ("vehicles", 200, None)
+    assert error.startswith("JSONDecodeError")
