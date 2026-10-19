@@ -194,6 +194,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** Two services to deploy and watch instead of one, and the polls of the two feeds aren't aligned in time.  
 **Revisit if:** An analysis needs both feeds sampled at the same instant, which would favor one loop polling both.  
 
+## 24. On time means 1 minute early to 5 minutes late
+
+**Date:** 2026-10-19  
+**Decision:** A bus counts as on time if its arrival at a stop is no more than 1 minute early and no more than 5 minutes late. The window is configurable.  
+**Why:** It matches METRO's own standard for local buses (a six-minute window starting 59 seconds before the scheduled departure, as reported by [Houston Landing](https://www.houstonlanding.org/metro-looks-to-new-fleet-to-improve-on-time-performance-of-its-buses-will-it-be-enough/)), so results can be compared with METRO's 74% goal. It's also the most common window in the industry; there's no national standard ([TransitCenter](https://transitcenter.org/bus-time-even-mean/)).  
+**Tradeoff:** METRO measures departures, most likely at timepoints; this project uses last arrival predictions at every stop. The numbers are comparable but not identical.  
+**Revisit if:** METRO publishes a different definition, or an analysis needs a stricter window.  
+
 ## Not decided yet
 
 - **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
