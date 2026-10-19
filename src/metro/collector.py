@@ -1,4 +1,4 @@
-"""Poll METRO's TripUpdates feed on a fixed schedule and record every attempt."""
+"""Poll a METRO feed on a fixed schedule and record every attempt."""
 
 import argparse
 import gzip
@@ -206,7 +206,7 @@ def run(feed: Feed, settings: Settings) -> None:
             healthcheck_url=settings.healthcheck_url,
         )
         tick = time.monotonic()
-        log.info("polling every %.0f s", feed.name, settings.poll_interval_seconds)
+        log.info("polling %s every %.0f s", feed.name, settings.poll_interval_seconds)
         log.info("health check pings %s", "on" if settings.healthcheck_url else "off")
 
         while not stop.is_set():

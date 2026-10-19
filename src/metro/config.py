@@ -1,4 +1,4 @@
-"""Collector settings, reads from environment variables."""
+"""Collector settings, read from environment variables."""
 
 import os
 from dataclasses import dataclass
