@@ -4,7 +4,7 @@ set -euo pipefail
 
 APP=/opt/metro/app
 STATE=/var/lib/metro/deployed-commit
-SERVICES=(metro-collector)
+SERVICES=(metro-collector metro-vehicles)
 
 if [[ $EUID -ne 0 ]]; then
     echo "run with sudo: sudo metro-update" >&2
