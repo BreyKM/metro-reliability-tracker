@@ -175,6 +175,18 @@ The collector logs `health check pings on` at startup when the URL is set.
 ### Deploy a code change
 
 ```bash
+sudo metro-update
+```
+
+It refuses to run unless the server is on `main` with no local changes. It pulls, runs `uv sync` and `metro-migrate`, and only then restarts the collector, so a failed step leaves the old version running. It shows the new logs, and lists any changed files in `deploy/` that need reinstalling by hand. Installed from `deploy/update.sh`:
+
+```bash
+sudo install -m 750 -o root -g root deploy/update.sh /usr/local/sbin/metro-update
+```
+
+The manual steps, if needed:
+
+```bash
 cd /opt/metro/app
 sudo -u metro git pull
 sudo -u metro -H uv sync --locked --no-dev
