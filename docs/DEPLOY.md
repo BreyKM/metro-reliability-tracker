@@ -7,7 +7,7 @@ How the production server is set up and run. Following this top to bottom on a f
 | Piece | How it runs | Location |
 |---|---|---|
 | Collector | systemd service `metro-collector`, as user `metro` | `/opt/metro/app` |
-| Vehicles collector | systemd service metro-vehicles, as user metro | same code, "metro-collector vehicles" |
+| Vehicles collector | systemd service metro-vehicles, as user metro | same code, `metro-collector vehicles` |
 | Postgres 18 | Docker Compose, named volume `pgdata`, bound to `127.0.0.1:5432` | `/opt/metro/app/compose.yaml` |
 | Raw snapshots | written by the collector, gzipped, one folder per UTC day | `/opt/metro/data/raw` |
 | Raw cleanup | systemd timer `metro-raw-cleanup`, daily 09:00 UTC, keeps ~8 days | `deploy/metro-raw-cleanup.*` |
@@ -215,6 +215,7 @@ sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backu
 
 ```bash
 systemctl status metro-collector
+systemctl status metro-vehicles
 systemctl list-timers 'metro-*'
 df -h /
 sudo du -sh /opt/metro/data/raw /opt/metro/backups
