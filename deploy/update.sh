@@ -43,7 +43,7 @@ systemctl restart "${SERVICES[@]}"
 echo "restarted ${SERVICES[*]}; waiting for the first polls..."
 sleep 40
 
-for service in "${SERVICES[@]}"; deploy
+for service in "${SERVICES[@]}"; do
     journalctl -u "$service" --since "$started" --no-pager
     if ! systemctl is-active --quiet "$service"; then
         echo "$service is not running after the restart" >&2
