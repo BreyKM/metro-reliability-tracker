@@ -150,6 +150,43 @@ From one sample for route 002 (2026-09-25 02:15 UTC):
 - `DelaySeconds` is a float (`169.0`).
 - It's per route only; `data/Arrivals` for the whole system returns 404. Polling every route would be ~80+ requests per cycle, which the rate limit rules out.
 
+## Static GTFS
+
+Downloaded 2026-10-26 from `https://metro.resourcespace.com/pages/download.php?ref=4835&ext=zip` (12.7 MB zip). `feed_version` is `August2026IVOMS_20261008`; feed dates 2026-08-30 to 2027-01-23 (calendar runs to 2027-02-13). METRO publishes new versions at irregular intervals (several in summer and fall 2026 on Transitland).
+
+| File | Rows |
+|---|---|
+| `stop_times.txt` | 1,414,850 (71 MB) |
+| `shapes.txt` | 229,848 |
+| `trips.txt` | 21,878 |
+| `stops.txt` | 8,803 |
+| `routes.txt` | 120 |
+| `calendar.txt` / `calendar_dates.txt` | 6 / 48 |
+
+- No blank arrival times. About 10% of stop times are timepoints (`timepoint = 1`); METRO fills in times for the rest.
+- 32,620 stop times are past `24:00:00` (after-midnight trips belong to the previous service day).
+- Non-standard extras: `direction_names_exceptions.txt` and a `trips.ots_trip_short_name` column.
+- Files start with a byte-order mark; read them as `utf-8-sig`.
+
+### Matching realtime to the schedule
+
+Checked with `scripts/inspect_gtfs.py` against two TripUpdates snapshots:
+
+| | 2025-09-25, 03:39 UTC | 2026-10-26, 18:30 UTC |
+|---|---|---|
+| trip_id in trips.txt | 251 / 251 | 481 / 481 |
+| route_id in routes.txt | 53 / 53 | 84 / 84 |
+| stop_id in stops.txt | 5,889 / 5,956 | 7,376 / 7,478 |
+| `time − delay` equals GTFS arrival, joined on (trip_id, stop_sequence) | 88.8% | 100.0% (19,344 / 19,344) |
+
+- **Transit Data IDs match after removing `Ho414_4620_`** (100% of trips and routes in both Vehicles samples). Confirmed.
+- **Realtime stop IDs sometimes add a bay letter** (`100_A`, `84_A`, `13170_E`). The part before `_` is in `stops.txt` for 62 of 67 in the September sample. Strip it when looking up stop details; store the full ID.
+- **Trip IDs survive schedule changes, but stop patterns don't.** In the September snapshot, 43 of 251 trips had stop sequences shifted by 1–2 from the current schedule, because that snapshot ran on the previous schedule version. Joined on (trip_id, base stop_id) instead, 97.4% matched exactly. Today's snapshot matches the current version exactly. So joining to the schedule needs the version that was in effect on the service date.
+- **`scheduled_arrival` (`time − delay`) is reliable** when matched to the right schedule version.
+- 270 trips visit one stop twice (loops on routes 309 and 310, the Gulfton Circulators, and 076 Evergreen), so (trip_id, stop_id) isn't unique; join on (trip_id, stop_sequence) within the schedule version.
+- Checked against 10 days of collected data (2026-10-26): every (service_date, trip_id, stop_id) with more than one stop_sequence is on route 076, 309, or 310, so realtime numbering hasn't shifted between polls. The two rows are two real visits.
+
+
 ## IDs across APIs
 
 | | TripUpdates | Transit Data |
@@ -158,12 +195,10 @@ From one sample for route 002 (2026-09-25 02:15 UTC):
 | Route | `099` | `Ho414_4620_099` (`RouteName`: `099`) |
 | Stop | not checked yet | `Ho414_4620_9829` |
 
-It looks like stripping the `Ho414_4620_` prefix lines them up. **This is unconfirmed.** I need to check it across a full snapshot and against static GTFS `trips.txt` before relying on it.
+It looks like stripping the `Ho414_4620_` prefix lines them up. Confirmed against static GTFS (2026-10-26): removing `Ho414_4620_` matches 100% of Transit Data trips and routes. Realtime stop IDs sometimes add a bay letter (`_A`, `_B`); see Static GTFS.
 
 ## Open questions
 
-- Do trip IDs match between TripUpdates, Transit Data, and static GTFS?
-- Does `time − delay` equal the static GTFS scheduled time?
 - Do canceled trips ever appear in TripUpdates, or only in Arrivals' `IsCanceled`?
 - Why do some trips have zero stop time updates: not started yet, already finished, or lost tracking?
 - Why didn't some trips advance over 30 minutes? My guess is they hadn't left their first stop.
@@ -172,3 +207,4 @@ It looks like stripping the `Ho414_4620_` prefix lines them up. **This is unconf
 - Does Transit Data have its own rate limit, separate from GTFS Realtime's? (Each feed polls every 30 s on its own key with no 429s, so separate limits look likely.)
 - Why were there 554 trips in TripUpdates at 6:59 PM but only 332 buses in Vehicles at 8:26 PM? The snapshots were 90 minutes apart, and TripUpdates may include trips that haven't started. Compare two snapshots taken at the same time.
 - What should the staleness cutoff for GPS positions be?
+- When METRO publishes a new schedule version, on what date does the realtime feed switch to it? (The current version ends 2027-01-23, so a change is likely in January.)
