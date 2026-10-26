@@ -30,5 +30,7 @@ def database_url():
 def db(database_url):
     """An autocommit connection to the test database with every table emptied."""
     with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute("TRUNCATE poll, stop_prediction, vehicle_position RESTART IDENTITY")
+        conn.execute(
+            "TRUNCATE poll, stop_prediction, vehicle_position, gtfs_feed RESTART IDENTITY CASCADE"
+        )
         yield conn

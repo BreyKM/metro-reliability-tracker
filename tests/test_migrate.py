@@ -16,7 +16,14 @@ def test_migrations_create_tables(db):
 
     tables = {row[0] for row in rows}
 
-    assert {"schema_migration", "poll", "stop_prediction", "vehicle_position"} <= tables
+    assert {
+        "schema_migration",
+        "poll",
+        "stop_prediction",
+        "vehicle_position",
+        "gtfs_feed",
+        "gtfs_stop_time",
+    } <= tables
 
 
 def test_rerunning_migrations_applies_nothing(database_url):

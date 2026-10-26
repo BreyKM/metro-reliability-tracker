@@ -211,6 +211,16 @@ sudo cp deploy/<unit> /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup
 ```
 
+### Load a new GTFS schedule version
+
+When METRO publishes a new schedule, download it and load it with the first service date it applies to. Loading the same zip twice does nothing.
+
+```bash
+sudo -u metro mkdir -p /opt/metro/data/gtfs
+sudo -u metro curl -fL -o /opt/metro/data/gtfs/metro_gtfs_YYYYMMDD.zip "https://metro.resourcespace.com/pages/download.php?ref=4835&ext=zip"
+cd /opt/metro/app && sudo -u metro -H .venv/bin/metro-load-gtfs /opt/metro/data/gtfs/metro_gtfs_YYYYMMDD.zip --effective-from YYYY-MM-DD
+```
+
 ### Health checks
 
 ```bash
