@@ -1,6 +1,6 @@
 # Feed Notes
 
-What I've found by probing METRO's APIs directly. Numbers come from specific snapshots I saved, not long-run averages, and each one says when it was taken. Houston times are CDT (UTC−5).
+What I've found by probing METRO's APIs directly, plus what continuous collection has shown since 2026-10-16. Snapshot numbers come from specific responses I saved; collection numbers come from the `poll` table. Each one says when it was measured. Houston times are CDT (UTC−5) until 2026-11-01, then CST (UTC−6).
 
 ## Sources
 
@@ -20,6 +20,15 @@ Continuous collection on the VPS started **2026-10-16 21:58:33 UTC** (Fri 4:58 P
 
 Vehicles collection started **2026-10-19 07:14:16 UTC** (Mon 2:14 AM Houston), as a separate service.
 
+## Storage growth
+
+| Measured | vehicle_position | stop_prediction | Raw files | Disk free |
+|---|---|---|---|---|
+| 2026-10-22 | 846 MB, 4.15M rows | 729 MB, 2.85M rows | 3.5 GB | 63 GB |
+| 2026-10-26 | 1,506 MB, 7.38M rows | 1,139 MB, 4.43M rows | 4.9 GB | 59 GB |
+
+Between the two: ~180 MB/day for `vehicle_position`, ~110 MB/day for `stop_prediction` (about 3.7 days, including a weekend; weekdays alone were higher). Raw files are capped by the ~8-day cleanup and level off around 5 GB.
+
 ## TripUpdates
 
 ### Snapshots
@@ -29,7 +38,7 @@ Vehicles collection started **2026-10-19 07:14:16 UTC** (Mon 2:14 AM Houston), a
 | 2026-09-25 03:39 | Thu 10:39 PM | 436,531 | 251 | 11,537 |
 | 2026-09-25 23:59 | Fri 6:59 PM | 791,816 | 554 | not measured |
 
-Evening volume is about twice late-night volume. I haven't looked at a weekday morning rush yet.
+Evening volume is about twice late-night volume. From continuous collection, the largest snapshot so far had 26,692 usable predictions (first week, from `poll.row_count`).
 
 ### Fields
 
@@ -44,7 +53,7 @@ From the 03:39 UTC snapshot:
 | `departure.time`, `departure.delay` | 11,293 / 11,537 |
 
 - Delay and predicted time are both given, so scheduled time = `time − delay`. I haven't checked this against static GTFS yet.
-- The 10 updates with no arrival also have no usable departure (time and delay), so the parser skips them. My first guess was that they were first stops with only a departure;  
+- The 10 updates with no arrival also have no usable departure (time and delay), so the parser skips them. My first guess was that they were first stops with only a departure;
 parsing the snapshot showed that's wrong (11,527 predictions, 10 skipped). The 244 with no departure are probably last stops. Arrival is used when present, with a fallback to departure; the fallback didn't trigger on this snapshot.
 - `start_date` is the Houston service date as `YYYYMMDD`. At 03:39 UTC it read `20260924`, which is correct for 10:39 PM local.
 - Every entity was a `trip_update`, and every trip was `SCHEDULED`. None were `CANCELED`, but that snapshot was late at night, so it doesn't show whether cancellations ever appear here.
@@ -73,6 +82,8 @@ I polled every ~10 s for 5 minutes (2026-09-26, about 00:32 UTC):
 
 My first guess, from two night snapshots whose headers happened to land on :00 and :30, was a 30-second cycle. That was wrong.
 
+Continuous collection confirms it: over the first 7,935 polls at 30-second intervals, none returned an unchanged header.
+
 ### Rate limit
 
 It isn't documented in the portal. What I observed:
@@ -83,6 +94,8 @@ It isn't documented in the portal. What I observed:
 | Every ~10.7 s | 28 requests over 5 minutes, no 429s |
 
 So the limit is somewhere between about 6 and 12 requests a minute, or it's a burst limit. I haven't pinned it down.
+
+In production, polling each feed every 30 seconds (separate keys) has produced no 429s on either feed since collection started.
 
 ### Compression
 
@@ -101,6 +114,8 @@ So the limit is somewhere between about 6 and 12 requests a minute, or it's a bu
 - **All 366 rows were `IsMonitored: true`.** Unmonitored buses may be left out rather than flagged.
 - **All trip IDs share the prefix `Ho414_4620`.**
 - **340 of 366 rows had a nonzero `Delayseconds`.** It's one delay per trip, not per stop.
+
+From continuous collection (first week): about 450 rows per poll at weekday midday, a peak of 718, and 3–4 rows without a GPS fix per poll (about 1%). No response has been paginated. Almost every poll stores new positions for nearly every bus, so buses report at least every ~30 seconds.
 
 ### Position age
 
@@ -152,9 +167,8 @@ It looks like stripping the `Ho414_4620_` prefix lines them up. **This is unconf
 - Do canceled trips ever appear in TripUpdates, or only in Arrivals' `IsCanceled`?
 - Why do some trips have zero stop time updates: not started yet, already finished, or lost tracking?
 - Why didn't some trips advance over 30 minutes? My guess is they hadn't left their first stop.
-- What's the exact rate limit? Is there also a daily or monthly quota?
-- How large are snapshots at weekday morning rush?
-- Is the ~26 s minimum position age the reporting interval or pipeline lag? Polling Vehicles every ~10 s for a few minutes and watching when each bus's `VehicleReportTime` changes would tell.
-- Does Transit Data have its own rate limit, separate from GTFS Realtime's?
+- What's the exact rate limit? Is there also a daily or monthly quota? (30-second polling causes no 429s; the exact limit is still unknown.)
+- Is the ~26 s minimum position age the reporting interval or pipeline lag? (Production shows new positions for almost every bus at each 30-second poll, so buses report at least that often. Whether the ~26 s is lag is still unknown.)
+- Does Transit Data have its own rate limit, separate from GTFS Realtime's? (Each feed polls every 30 s on its own key with no 429s, so separate limits look likely.)
 - Why were there 554 trips in TripUpdates at 6:59 PM but only 332 buses in Vehicles at 8:26 PM? The snapshots were 90 minutes apart, and TripUpdates may include trips that haven't started. Compare two snapshots taken at the same time.
 - What should the staleness cutoff for GPS positions be?
