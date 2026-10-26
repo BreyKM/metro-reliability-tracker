@@ -10,6 +10,8 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Tradeoff:** Arrivals includes scheduled time and a cancellation flag directly. With TripUpdates I compute scheduled time as `time − delay`, and cancellations may not appear at all (not confirmed yet).  
 **Revisit if:** TripUpdates turns out to leave out cancellations that Arrivals reports, or `time − delay` doesn't match the static schedule.
 
+**Update 2026-10-26:** Checked against the static schedule: `time − delay` matched the scheduled arrival at 100% of stops in a current snapshot, joined on trip and stop sequence (FEED_NOTES).
+
 ## 2. Record Vehicles from the start
 
 **Date:** 2026-09-24  
@@ -202,11 +204,19 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** METRO measures departures, most likely at timepoints; this project uses last arrival predictions at every stop. The numbers are comparable but not identical.  
 **Revisit if:** METRO publishes a different definition, or an analysis needs a stricter window.  
 
+## 25. Versioned static GTFS, chosen by effective date
+
+**Date:** 2026-10-26  
+**Decision:** Every static GTFS version is loaded in full and never changed, keyed by a `gtfs_feed` row (SHA-256 of the zip is unique, so the same file isn't loaded twice). Each version has an `effective_from` date chosen when it's loaded; `gtfs_feed_for(date)` returns the newest version with `effective_from` on or before that date. GTFS times are stored as integer seconds from the start of the service day, and `service_day_start(date)` applies the "noon minus 12 hours" rule in Houston time.  
+**Why:** METRO keeps trip IDs across schedule versions but changes stop patterns: a September snapshot matched the current schedule on only 88.8% of stops, while a current one matches 100% (FEED_NOTES). So a prediction must be joined to the version in effect on its service date. Keeping whole versions is simpler and easier to audit than tracking per-row changes, and costs ~190 MB per version (186 MB measured, almost all stop_times), less than one day of realtime data. Seconds since the start of the service day represent times past 24:00:00 directly, at 4 bytes per value.  
+**Tradeoff:** If METRO switches the realtime feed on a different day than `effective_from`, a day or two around a change can join to the wrong version. A per-day match-rate check (next PR) catches that, and fixing it means updating one date.  
+**Revisit if:** Changeovers regularly mismatch, in which case choose the version per day from the data instead.  
+
 ## Not decided yet
 
-- **On-time definition.** Plan: 1 minute early to 5 minutes late, configurable. Need to find and cite the source of that convention before using it.
 - **Minimum sample size.** Plan: don't answer a percentile query with fewer than ~20 observations, and return the count with every answer. Need to decide the exact number once there's real data.
 - **Which Vehicles row is the current trip** when a bus has two rows.
 - **GPS staleness cutoff** for arrival detection.
 - **Poll interval for Vehicles.** Probably 30 s like TripUpdates, but its rate limit hasn't been measured.
 - **Retention for `vehicle_position`.** Measured over a week (2026-10-19 to 2026-10-26, including a weekend): ~180 MB/day (~870K rows/day), about 60% of database growth; weekdays alone ran closer to 230 MB/day. Total disk growth is ~9–10 GB/month once raw snapshots level off at ~5 GB, with 59 GB free, so the disk fills around April 2027. Plan: partition by month on `reported_at`, archive old months to B2 as Parquet, then drop them from Postgres. Do it within 1–2 months, while the table is still a few GB.
+- **Detecting new schedule versions.** Plan: download the GTFS zip daily, load it when its SHA-256 and `feed_version` are both new, and check the daily match rate between predictions and the schedule. How to set `effective_from` automatically is still open.
