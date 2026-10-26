@@ -209,4 +209,4 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 - **Which Vehicles row is the current trip** when a bus has two rows.
 - **GPS staleness cutoff** for arrival detection.
 - **Poll interval for Vehicles.** Probably 30 s like TripUpdates, but its rate limit hasn't been measured.
-- **Retention for `vehicle_position`.** Rough worst case is ~1M rows/day (~3–4 GB/month). Measure actual size after a few days of collection, then decide when old positions can be deleted.
+- **Retention for `vehicle_position`.** Measured over a week (2026-10-19 to 2026-10-26, including a weekend): ~180 MB/day (~870K rows/day), about 60% of database growth; weekdays alone ran closer to 230 MB/day. Total disk growth is ~9–10 GB/month once raw snapshots level off at ~5 GB, with 59 GB free, so the disk fills around April 2027. Plan: partition by month on `reported_at`, archive old months to B2 as Parquet, then drop them from Postgres. Do it within 1–2 months, while the table is still a few GB.
