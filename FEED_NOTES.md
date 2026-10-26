@@ -172,7 +172,7 @@ Downloaded 2026-10-26 from `https://metro.resourcespace.com/pages/download.php?r
 
 Checked with `scripts/inspect_gtfs.py` against two TripUpdates snapshots:
 
-| | 2025-09-25, 03:39 UTC | 2026-10-26, 18:30 UTC |
+| | 2026-09-25, 03:39 UTC | 2026-10-26, 18:30 UTC |
 |---|---|---|
 | trip_id in trips.txt | 251 / 251 | 481 / 481 |
 | route_id in routes.txt | 53 / 53 | 84 / 84 |
@@ -182,7 +182,17 @@ Checked with `scripts/inspect_gtfs.py` against two TripUpdates snapshots:
 - **Transit Data IDs match after removing `Ho414_4620_`** (100% of trips and routes in both Vehicles samples). Confirmed.
 - **Realtime stop IDs sometimes add a bay letter** (`100_A`, `84_A`, `13170_E`). The part before `_` is in `stops.txt` for 62 of 67 in the September sample. Strip it when looking up stop details; store the full ID.
 - **Trip IDs survive schedule changes, but stop patterns don't.** In the September snapshot, 43 of 251 trips had stop sequences shifted by 1–2 from the current schedule, because that snapshot ran on the previous schedule version. Joined on (trip_id, base stop_id) instead, 97.4% matched exactly. Today's snapshot matches the current version exactly. So joining to the schedule needs the version that was in effect on the service date.
-- **`scheduled_arrival` (`time − delay`) is reliable** when matched to the right schedule version.
+- **`scheduled_arrival` (`time − delay`) is reliable** when matched to the right schedule version and the right service date (next bullet).
+- **`start_date` is the calendar date a trip starts, not its service date.** A trip scheduled to start at or after `24:00:00` is labeled with the next day's date, from the moment it first appears (as early as 11:30 PM). Trips that start before midnight and run past it keep the correct service date. The GTFS-Realtime spec says `start_date` should be the service date in both cases. Checked on a full day of collected data (2026-10-26): for stops past `24:00:00`, every row from an after-midnight trip matched the schedule one day before its stored `service_date`, and every row from a midnight-crossing trip matched its own date:
+
+  | Stored `service_date` | Trip starts | Matches stored date | Matches the day before |
+  |---|---|---|---|
+  | 2026-10-24 | before midnight | 4,555 | 0 |
+  | 2026-10-24 | after midnight | 0 | 5,861 |
+  | 2026-10-25 | before midnight | 4,570 | 0 |
+  | 2026-10-25 | after midnight | 0 | 5,336 |
+
+  The scheduled and predicted times are correct; only the date label is off. On 2026-10-25, all 398,230 predictions joined to the schedule, 392,894 matched on their stored date, and the other 5,336 (68 Saturday-only trips) matched one day earlier.
 - 270 trips visit one stop twice (loops on routes 309 and 310, the Gulfton Circulators, and 076 Evergreen), so (trip_id, stop_id) isn't unique; join on (trip_id, stop_sequence) within the schedule version.
 - Checked against 10 days of collected data (2026-10-26): every (service_date, trip_id, stop_id) with more than one stop_sequence is on route 076, 309, or 310, so realtime numbering hasn't shifted between polls. The two rows are two real visits.
 
@@ -208,3 +218,4 @@ It looks like stripping the `Ho414_4620_` prefix lines them up. Confirmed agains
 - Why were there 554 trips in TripUpdates at 6:59 PM but only 332 buses in Vehicles at 8:26 PM? The snapshots were 90 minutes apart, and TripUpdates may include trips that haven't started. Compare two snapshots taken at the same time.
 - What should the staleness cutoff for GPS positions be?
 - When METRO publishes a new schedule version, on what date does the realtime feed switch to it? (The current version ends 2027-01-23, so a change is likely in January.)
+- Does the `start_date` quirk also apply on the two DST days, and does METRO's TripDescriptor `start_time` show `00:10:00` or `24:10:00` for after-midnight trips?

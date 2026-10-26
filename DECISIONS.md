@@ -210,7 +210,15 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Decision:** Every static GTFS version is loaded in full and never changed, keyed by a `gtfs_feed` row (SHA-256 of the zip is unique, so the same file isn't loaded twice). Each version has an `effective_from` date chosen when it's loaded; `gtfs_feed_for(date)` returns the newest version with `effective_from` on or before that date. GTFS times are stored as integer seconds from the start of the service day, and `service_day_start(date)` applies the "noon minus 12 hours" rule in Houston time.  
 **Why:** METRO keeps trip IDs across schedule versions but changes stop patterns: a September snapshot matched the current schedule on only 88.8% of stops, while a current one matches 100% (FEED_NOTES). So a prediction must be joined to the version in effect on its service date. Keeping whole versions is simpler and easier to audit than tracking per-row changes, and costs ~190 MB per version (186 MB measured, almost all stop_times), less than one day of realtime data. Seconds since the start of the service day represent times past 24:00:00 directly, at 4 bytes per value.  
 **Tradeoff:** If METRO switches the realtime feed on a different day than `effective_from`, a day or two around a change can join to the wrong version. A per-day match-rate check (next PR) catches that, and fixing it means updating one date.  
-**Revisit if:** Changeovers regularly mismatch, in which case choose the version per day from the data instead.  
+**Revisit if:** Changeovers regularly mismatch, in which case choose the version per day from the data instead. 
+
+## 26. Store `start_date` as reported; correct the service date when joining to the schedule
+
+**Date:** 2026-10-26  
+**Decision:** `stop_prediction.service_date` keeps METRO's `start_date` exactly as reported. Queries that join to the schedule assign each prediction to the reported date if its scheduled time matches there, otherwise to the day before if it matches there. A prediction matching neither is reported as unmatched, not guessed.  
+**Why:** METRO labels trips that start after midnight with the next calendar day instead of their service date (FEED_NOTES), about 1.3–1.5% of rows each night. Correcting it in the collector would make the 24/7 process depend on the static schedule to know which trips start after midnight. Following #17, the stored data stays as the feed reported it, and the correction lives in one query where it can be checked: a scheduled time matching to the second can't happen by accident.  
+**Tradeoff:** Every query that groups by service date or weekday has to use the corrected date, not the stored column. Uncorrected, these trips count toward the wrong day of the week.  
+**Revisit if:** METRO fixes `start_date`, or a correction rule turns out to need more than "the day before."  
 
 ## Not decided yet
 
