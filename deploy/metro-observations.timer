@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily schedule join for finished service days
+
+[Timer]
+OnCalendar=*-*-* 10:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
