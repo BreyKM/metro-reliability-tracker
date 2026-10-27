@@ -31,7 +31,7 @@ That's a **last prediction, not a measured arrival**. It's usually close, becaus
 
 - **Collector:** one Python process per feed, polling every 30 seconds on a fixed schedule. Every attempt is logged to a `poll` table, including failures and rate limits, so any gap in the data is visible and explained.
 - **Storage:** PostgreSQL 18. Predictions are upserted at one row per (service date, trip, stop), and an upsert can only move forward in time, so reprocessing old data can't overwrite newer data. GPS positions are append-only.
-- **Schedule:** METRO's static GTFS is loaded with `COPY`, one full version per schedule change, so each day's predictions are compared against the schedule that was in effect that day.
+- **Schedule:** METRO's static GTFS is loaded with `COPY`, one full version per schedule change. A daily job joins each finished day's predictions to the schedule that was in effect, corrects METRO's date label on after-midnight trips, and alerts me if more than 1% don't match.
 - **Raw data:** every snapshot is saved gzipped for about a week, so the database can be rebuilt if a bug is found.
 - **Operations:** Docker Compose for Postgres, systemd for the collectors, nightly backups to Backblaze B2 (restore tested), and external monitoring that emails me if new data stops arriving.
 - **Code quality:** pytest against a real Postgres in CI, including tests on recorded METRO snapshots; ruff for linting and formatting.
@@ -63,7 +63,7 @@ uv run metro-collector        # or: uv run metro-collector vehicles
 
 ## What's next
 
-- Download new schedule versions automatically and check daily that predictions still match the schedule
+- Download new schedule versions automatically
 - The leave-by query: percentile delays by stop, route, hour, and weekday, served through FastAPI
 - Measured arrivals from GPS, compared against METRO's predictions
 - A small React front end

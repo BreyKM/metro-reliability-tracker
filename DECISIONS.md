@@ -209,7 +209,7 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Date:** 2026-10-26  
 **Decision:** Every static GTFS version is loaded in full and never changed, keyed by a `gtfs_feed` row (SHA-256 of the zip is unique, so the same file isn't loaded twice). Each version has an `effective_from` date chosen when it's loaded; `gtfs_feed_for(date)` returns the newest version with `effective_from` on or before that date. GTFS times are stored as integer seconds from the start of the service day, and `service_day_start(date)` applies the "noon minus 12 hours" rule in Houston time.  
 **Why:** METRO keeps trip IDs across schedule versions but changes stop patterns: a September snapshot matched the current schedule on only 88.8% of stops, while a current one matches 100% (FEED_NOTES). So a prediction must be joined to the version in effect on its service date. Keeping whole versions is simpler and easier to audit than tracking per-row changes, and costs ~190 MB per version (186 MB measured, almost all stop_times), less than one day of realtime data. Seconds since the start of the service day represent times past 24:00:00 directly, at 4 bytes per value.  
-**Tradeoff:** If METRO switches the realtime feed on a different day than `effective_from`, a day or two around a change can join to the wrong version. A per-day match-rate check (next PR) catches that, and fixing it means updating one date.  
+**Tradeoff:** If METRO switches the realtime feed on a different day than `effective_from`, a day or two around a change can join to the wrong version. The daily match-rate check (#27) catches that, and fixing it means updating one date.  
 **Revisit if:** Changeovers regularly mismatch, in which case choose the version per day from the data instead. 
 
 ## 26. Store `start_date` as reported; correct the service date when joining to the schedule
@@ -220,6 +220,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** Every query that groups by service date or weekday has to use the corrected date, not the stored column. Uncorrected, these trips count toward the wrong day of the week.  
 **Revisit if:** METRO fixes `start_date`, or a correction rule turns out to need more than "the day before."  
 
+## 27. A daily table of observations, built from finished service days
+
+**Date:** 2026-10-26  
+**Decision:** A daily job (`metro-build-observations`, systemd timer at 10:00 UTC) joins each finished service date's predictions to the schedule and writes one row per stop visit to `stop_observation`, with the corrected service date (#26), GTFS route, direction, and stop, METRO's last predicted arrival, the delay, and how long before arrival that prediction was made. Date S is built on S + 2, once its after-midnight trips (stored under S + 1) have finished. Each date is rebuilt in one transaction (delete, then insert), so any range can be rebuilt after a fix. Counts of exact, date-shifted, and unmatched predictions go in `schedule_match`; if more than 1% are unmatched, or a day has no predictions, the job reports a failure to healthchecks.io, which emails me.  
+**Why:** The leave-by query reads months of data; joining at query time would redo the same work on every request, and a materialized view can only be refreshed in full. Building each day once matches how the data grows. Keeping `lead_seconds` lets the cutoff for weak predictions be chosen from data later. The main failure this catches is a new schedule version METRO published that I haven't loaded: nothing errors, the match rate just drops.  
+**Tradeoff:** Results are two days behind. One more job and health check to run. The 1% threshold is a first guess.  
+**Revisit if:** The leave-by answers need to be fresher than two days, or normal days regularly come close to 1% unmatched.  
+
 ## Not decided yet
 
 - **Minimum sample size.** Plan: don't answer a percentile query with fewer than ~20 observations, and return the count with every answer. Need to decide the exact number once there's real data.
@@ -227,4 +235,4 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 - **GPS staleness cutoff** for arrival detection.
 - **Poll interval for Vehicles.** Probably 30 s like TripUpdates, but its rate limit hasn't been measured.
 - **Retention for `vehicle_position`.** Measured over a week (2026-10-19 to 2026-10-26, including a weekend): ~180 MB/day (~870K rows/day), about 60% of database growth; weekdays alone ran closer to 230 MB/day. Total disk growth is ~9–10 GB/month once raw snapshots level off at ~5 GB, with 59 GB free, so the disk fills around April 2027. Plan: partition by month on `reported_at`, archive old months to B2 as Parquet, then drop them from Postgres. Do it within 1–2 months, while the table is still a few GB.
-- **Detecting new schedule versions.** Plan: download the GTFS zip daily, load it when its SHA-256 and `feed_version` are both new, and check the daily match rate between predictions and the schedule. How to set `effective_from` automatically is still open.
+- **Detecting new schedule versions.** Plan: download the GTFS zip daily, load it when its SHA-256 and `feed_version` are both new. How to set `effective_from` automatically is still open.

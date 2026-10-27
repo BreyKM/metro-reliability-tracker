@@ -1,0 +1,16 @@
+[Unit]
+Description=Join finished service days to the GTFS schedule
+After=docker.service
+
+[Service]
+Type=oneshot
+User=metro
+Group=metro
+WorkingDirectory=/opt/metro/app
+EnvironmentFile=/opt/metro/app/.env
+ExecStart=/opt/metro/app/.venv/bin/metro-build-observations
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
