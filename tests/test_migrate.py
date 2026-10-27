@@ -23,6 +23,8 @@ def test_migrations_create_tables(db):
         "vehicle_position",
         "gtfs_feed",
         "gtfs_stop_time",
+        "stop_observation",
+        "schedule_match",
     } <= tables
 
 
