@@ -11,6 +11,7 @@ How the production server is set up and run. Following this top to bottom on a f
 | Postgres 18 | Docker Compose, named volume `pgdata`, bound to `127.0.0.1:5432` | `/opt/metro/app/compose.yaml` |
 | Raw snapshots | written by the collector, gzipped, one folder per UTC day | `/opt/metro/data/raw` |
 | Raw cleanup | systemd timer `metro-raw-cleanup`, daily 09:00 UTC, keeps ~8 days | `deploy/metro-raw-cleanup.*` |
+| Schedule join | systemd timer `metro-observations`, daily 10:00 UTC, builds `stop_observation` | `deploy/metro-observations.*` |
 | Backups | systemd timer `metro-backup`, daily 08:00 UTC, `pg_dump` → Backblaze B2 | `/usr/local/sbin/metro-backup` |
 | Secrets | app: `/opt/metro/app/.env` (metro, 600). Backups: `/etc/metro/` (root, 600) | never in the repo |
 
@@ -163,17 +164,34 @@ The script runs as root from a root-owned copy, not from the repo, because the r
 
 ## 7. Monitoring
 
-healthchecks.io has three checks:
+healthchecks.io has four checks:
 - `metro-collector`: period 1 minute, grace 10 minutes. The TripUpdates collector pings it after recording a new snapshot (at most once a minute).
 - `metro-vehicles`: period 1 minute, grace 10 minutes. The Vehicles collector pings it the same way.
 - `metro-backup`: period 1 day, grace 2 hours. `backup.sh` pings it after a successful upload.
+- `metro-observations`: period 1 day, grace 3 hours. The schedule join pings it after building; it pings `/fail` (an immediate alert) if more than 1% of a day's predictions don't match the schedule, or a day has none.
 
 Add the ping URLs (secret; anyone with them can ping):
 - `HEALTHCHECK_URL=...` in `/opt/metro/app/.env`, then `sudo systemctl restart metro-collector`
 - `VEHICLES_HEALTHCHECK_URL=...` in `/opt/metro/app/.env`, then `sudo systemctl restart metro-vehicles`
 - `BACKUP_HEALTHCHECK_URL=...` in `/etc/metro/backup.env`, then reinstall the script (`sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup`)
+- `OBSERVATIONS_HEALTHCHECK_URL=...` in `/opt/metro/app/.env` (read on the next run; nothing to restart)
 
 Each collector logs `health check pings on` at startup when its URL is set.
+
+## 8. Schedule join
+
+Needs at least one schedule version loaded (see "Load a new GTFS schedule version").
+
+```bash
+sudo cp deploy/metro-observations.service deploy/metro-observations.timer /etc/systemd/system/
+sudo systemd-analyze verify /etc/systemd/system/metro-observations.service
+sudo systemctl daemon-reload
+sudo systemctl start metro-observations.service    # first run backfills every finished day
+sudo journalctl -u metro-observations.service --no-pager
+sudo systemctl enable --now metro-observations.timer
+```
+
+To rebuild dates after a fix: `cd /opt/metro/app && sudo -u metro -H .venv/bin/metro-build-observations --from YYYY-MM-DD --to YYYY-MM-DD`.
 
 ## Routine operations
 
