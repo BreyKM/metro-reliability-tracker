@@ -18,9 +18,11 @@ MAX_UNMATCHED_SHARE = 0.01
 
 log = logging.getLogger(__name__)
 
-# Service dates that are finished and haven't been built yet. A day's after-midnight
-# trips are stored under the next date (decision #26), so date S is complete once S + 1
-# is over.
+# The newest service date that's finished: its after-midnight trips are stored under the
+# next date (decision #26), so date S is complete once S + 1 is over.
+LAST_FINISHED = "SELECT (now() AT TIME ZONE 'America/Chicago')::date - 2"
+
+# Finished service dates that haven't been built yet.
 DATES_TO_BUILD = """
     SELECT d::date
     FROM generate_series(
@@ -35,7 +37,7 @@ DATES_TO_BUILD = """
 
 # Rows stored under the day that match its schedule, plus rows stored under the next day that
 # match this day's schedule (METRO's next-day label, decision #26). Scheduled times must match to
-# the second."""
+# the second.
 INSERT_OBSERVATIONS = """
     WITH candidate AS (
         SELECT trip_id, stop_sequence, scheduled_arrival, predicted_arrival, last_seen_at,
@@ -153,8 +155,10 @@ def main() -> None:
         "--to", dest="end", type=date.fromisoformat, help="last date to rebuild (default: --from)"
     )
     args = parser.parse_args()
-    if args.end and not args.start:
+    if args.end and args.start:
         parser.error("--to needs --from")
+    if args.end and args.end < args.start:
+        parser.error("--to is before --from")
 
     load_dotenv()
     logging.Formatter.converter = time.gmtime
@@ -171,6 +175,12 @@ def main() -> None:
     with psycopg.connect(url, autocommit=True) as conn:
         if args.start:
             end = args.end or args.start
+            last_finished = conn.execute(LAST_FINISHED).fetchone()[0]
+            if end > last_finished:
+                sys.exit(
+                    f"{end} isn't finished yet; "
+                    f"the newest date that can be built is {last_finished}"
+                )
             days = [args.start + timedelta(days=n) for n in range((end - args.start).days + 1)]
         else:
             days = dates_to_build(conn)
