@@ -70,7 +70,38 @@ Passed stops drop out of a trip's update. That's what makes "last prediction bef
 
 About half of trips pass at least one stop per minute. Example: trip 12067968 went from stop 3 to stop 43 in 30 minutes.
 
-What I record is METRO's **last prediction** before the bus passed a stop, not a measured arrival. The two are close when the last poll was just before the bus arrived.
+What I record is METRO's **last prediction** before the bus passed a stop, not a measured arrival. The two are close when the last poll was just before the bus arrived, which isn't always the case; see the next section.
+
+### Stale predictions dropped in bulk
+
+Measured 2026-10-27 on `stop_observation`: 4,218,701 stop visits, service dates 2026-10-16 to 2026-10-25.
+
+Usually a stop drops out of a trip's update as the bus reaches it: the median lead time (predicted arrival minus when that prediction was last seen) is 17 s. But on some trips METRO keeps predicting stops no tracked bus is approaching, then drops a whole run of them in one poll.
+
+Example, a trip on 2026-10-22 (Houston time): stops 1–57 all had their last prediction at 15:14:23, with delays of 37–40 minutes. Stop 1, scheduled at 14:35:00, was predicted for 15:13:38, 45 s before that poll, so its "delay" had been growing with the clock. From stop 58 (scheduled 15:17:24) on, stops dropped one or two at a time with delays under 5 minutes. Most likely no bus was tracked on the trip until about 15:14, when one appeared near stop 58 running on time. Whether a bus served stops 1–57 can't be told from this feed.
+
+Delay by lead time:
+
+| Lead time | Stop visits | Delay p10 / p50 / p90 / p99 (s) |
+|---|---|---|
+| before −10 min | 5,551 | −101 / 630 / 4,819 / 6,916 |
+| −10 to −2 min | 37,030 | −40 / 1,050 / 5,145 / 6,950 |
+| −2 to 0 min | 829,026 | −64 / 158 / 747 / 3,904 |
+| 0 to 2 min | 2,353,597 | −68 / 146 / 655 / 2,418 |
+| 2 to 10 min | 200,384 | 492 / 2,980 / 5,656 / 7,662 |
+| over 10 min | 793,113 | 1,810 / 4,202 / 6,608 / 8,316 |
+
+22,327 of 64,598 trips (35%) had at least one stop drop out more than 10 minutes ahead of its prediction. Only 197 had every stop that way. In 7,290 the far-ahead stops came only after the last near-arrival stop (the trip left the feed early); in 14,249 they came before or between near-arrival stops, as in the example.
+
+A lead-time window alone isn't enough: stop 1 in the example has a lead of −45 s. Splitting the visits within ±2 minutes by what else dropped in the same poll:
+
+| Other stops dropped in the same poll | Stop visits | Delay p10 / p50 / p90 / p99 (s) |
+|---|---|---|
+| all within ±2 min | 3,114,964 | −68 / 144 / 624 / 1,629 |
+| one 2–10 min ahead, or more than 2 min behind | 18,700 | −33 / 378 / 1,458 / 3,223 |
+| one over 10 min ahead | 48,959 | 1,045 / 3,268 / 5,743 / 7,691 |
+
+Only the first row counts as trusted (decision #28): 74% of stop visits.
 
 ### Update cadence
 
@@ -211,7 +242,7 @@ It looks like stripping the `Ho414_4620_` prefix lines them up. Confirmed agains
 
 - Do canceled trips ever appear in TripUpdates, or only in Arrivals' `IsCanceled`?
 - Why do some trips have zero stop time updates: not started yet, already finished, or lost tracking?
-- Why didn't some trips advance over 30 minutes? My guess is they hadn't left their first stop.
+- Did a bus actually serve the stops in a bulk drop, untracked, or were they skipped? Compare with Vehicles GPS for the same trips. (This probably also explains the trips that didn't advance over 30 minutes: a stale first stop.)
 - What's the exact rate limit? Is there also a daily or monthly quota? (30-second polling causes no 429s; the exact limit is still unknown.)
 - Is the ~26 s minimum position age the reporting interval or pipeline lag? (Production shows new positions for almost every bus at each 30-second poll, so buses report at least that often. Whether the ~26 s is lag is still unknown.)
 - Does Transit Data have its own rate limit, separate from GTFS Realtime's? (Each feed polls every 30 s on its own key with no 429s, so separate limits look likely.)
