@@ -25,7 +25,7 @@ The headline feature, the leave-by query, is next. It needs a few weeks of histo
 
 METRO's TripUpdates feed predicts when each bus will reach each upcoming stop, and drops a stop once the bus passes it. The collector keeps the last prediction it saw for every stop, so each trip-stop ends with METRO's final prediction before the bus arrived.
 
-That's a **last prediction, not a measured arrival**. It's usually close, because the last poll is at most about 40 seconds before the bus gets there, and every row stores when that prediction was made so weak ones can be filtered out. METRO doesn't publish a GTFS-Realtime vehicle positions feed, so the collector also records bus GPS positions from METRO's Transit Data API. Turning those into measured arrivals, and comparing them with METRO's predictions, is planned.
+That's a **last prediction, not a measured arrival**. When METRO is tracking the bus, the stop drops out of the feed as the bus reaches it, so the last prediction is made within a minute or so of the arrival. But for about a quarter of stop visits it isn't, mostly where METRO wasn't tracking a bus: it kept predicting the stop for "now", then dropped a run of stops all at once with delays that never happened. Only visits whose last prediction, and every other stop dropped at the same time, was within 2 minutes of arrival count as trusted (74% so far), and the analysis uses only those. METRO doesn't publish a GTFS-Realtime vehicle positions feed, so the collector also records bus GPS positions from METRO's Transit Data API. Turning those into measured arrivals, and filling in the untrusted visits, is planned.
 
 ## How it works
 

@@ -26,7 +26,8 @@ Choices that shape this project, and why I made them. Evidence for data-related 
 **Decision:** A stop's recorded arrival is METRO's last prediction for that stop before it dropped out of the trip's update.  
 **Why:** TripUpdates removes stops once a bus passes them, so the last prediction seen is the closest thing to an arrival time in that feed. METRO has no GTFS-RT VehiclePositions feed to measure against.  
 **Tradeoff:** It's an estimate. Its accuracy depends on how close to the real arrival the last poll was. I store `last_seen_at` so the lead time (`predicted_time − last_seen_at`) can be checked and weak observations filtered out.  
-**Revisit if:** GPS-based arrival detection from Vehicles is built. Then the two can be compared directly, which also measures how accurate METRO's own predictions are.
+**Revisit if:** GPS-based arrival detection from Vehicles is built. Then the two can be compared directly, which also measures how accurate METRO's own predictions are.  
+**Update 2026-10-27:** The lead time wasn't always short. 26% of stop visits had a last prediction made more than 2 minutes from arrival, or dropped out together with one that was, mostly where METRO wasn't tracking a bus (FEED_NOTES, "Stale predictions dropped in bulk"). Those visits are flagged and left out of delay analysis (#28).
 
 ## 4. One row per trip stop, updated in place
 
@@ -119,7 +120,7 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 ## 14. Native Postgres locally, Docker on the VPS
 
 **Date:** 2026-09-25  
-**Decision:** Run PostgreSQL 18 natively on my Windows machine for development. Use Docker Engine with Compose on the VPS for deployment, and a Postgres service container in CI. Pin Postgres 18DE everywhere.  
+**Decision:** Run PostgreSQL 18 natively on my Windows machine for development. Use Docker Engine with Compose on the VPS for deployment, and a Postgres service container in CI. Pin Postgres 18 everywhere.  
 **Why:** Docker Desktop's current requirements list Windows 11 Enterprise, Pro, or Education; my machine runs Home. Running an unsupported setup while learning Docker would make every problem harder to diagnose. The VPS runs Linux, where Docker Engine runs natively, and that's also where the containers actually need to work.  
 **Tradeoff:** My development database isn't set up the same way as production. Pinning the same major version everywhere keeps the differences small, and the SQL is identical.  
 **Revisit if:** I move to Windows Pro or a Linux/macOS development machine.
@@ -227,6 +228,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Why:** The leave-by query reads months of data; joining at query time would redo the same work on every request, and a materialized view can only be refreshed in full. Building each day once matches how the data grows. Keeping `lead_seconds` lets the cutoff for weak predictions be chosen from data later. The main failure this catches is a new schedule version METRO published that I haven't loaded: nothing errors, the match rate just drops.  
 **Tradeoff:** Results are two days behind. One more job and health check to run. The 1% threshold is a first guess.  
 **Revisit if:** The leave-by answers need to be fresher than two days, or normal days regularly come close to 1% unmatched.  
+
+## 28. Only trust stop visits whose whole drop was near arrival
+
+**Date:** 2026-10-27  
+**Decision:** `stop_observation.trusted` is true only when every stop of the same trip that dropped out of the feed in the same poll had its last prediction within 2 minutes of its predicted arrival, either side. Delay analysis, starting with the leave-by query, uses trusted rows only. The daily build counts trusted rows in `schedule_match` and logs the share, with no alert.  
+**Why:** When METRO isn't tracking a bus on a trip, it keeps predicting the next stop for about "now", so the delay grows with the clock, and then drops the whole run of stale stops in one poll once a bus appears (FEED_NOTES). Those rows record delays that didn't happen; their median is 54 minutes. A lead-time window misses the first stop of such a run, whose prediction was always about "now"; checking the whole drop catches it. With the rule, p90 delay is 10.4 minutes and p99 27 minutes, against 74 minutes and 2 hours unfiltered. Polls are 30 seconds apart, so a real bus passing two stops in one poll stays well inside ±2 minutes. A looser version that only excluded drops containing a stop more than 10 minutes ahead kept 18,700 more rows whose p90 was 24 minutes.  
+**Tradeoff:** 26% of stop visits have no trusted arrival time, and they aren't random: they cluster on stretches of trips METRO wasn't tracking. Percentiles describe service when METRO was tracking the bus. Whether those stops were served on time is unknown until arrivals are measured from GPS. No alert on the trusted share yet, because 10 days isn't enough to know its normal range.  
+**Revisit if:** GPS-measured arrivals exist (compare them with trusted rows), or the daily trusted share moves far from 74%.  
 
 ## Not decided yet
 

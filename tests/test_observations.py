@@ -5,7 +5,7 @@ from test_gtfs import FILES, make_zip
 
 from metro.db import PollRecord, record_trip_updates
 from metro.gtfs import load_feed
-from metro.observations import MatchCounts, build_day, dates_to_build
+from metro.observations import MatchCounts, build_day, dates_to_build, parse_args
 from metro.trip_updates import ParsedSnapshot, StopPrediction
 
 MONDAY = date(2026, 10, 19)
@@ -13,9 +13,19 @@ TUESDAY = MONDAY + timedelta(days=1)
 DAY_START = datetime(2026, 10, 19, 5, tzinfo=UTC)
 SEEN = DAY_START + timedelta(hours=23)
 
-# T1 starts before midnight and runs past it; T2 starts after midnight.
-TRIPS = FILES["trips"] + "076,1,T2,1,Downtown\n"
-STOP_TIMES = FILES["stop_times"] + "T2,24:10:00,24:10:00,100,1,1\nT2,24:30:00,24:30:00,200,2,1\n"
+
+def at(seconds):
+    return DAY_START + timedelta(seconds=seconds)
+
+
+# T1 starts before midnight and runs past it; T2 starts after midnight. T3's two stops are
+# 40 seconds apart, so a bus can pass both between polls.
+TRIPS = FILES["trips"] + "076,1,T2,1,Downtown\n076,1,T3,0,Downtown\n"
+STOP_TIMES = (
+    FILES["stop_times"]
+    + "T2,24:10:00,24:10:00,100,1,1\nT2,24:30:00,24:30:00,200,2,1\n"
+    + "T3,08:00:00,08:00:00,100,1,1\nT3,08:00:40,08:00:40,200,2,1\n"
+)
 
 
 @pytest.fixture
@@ -40,10 +50,10 @@ def prediction(trip_id, stop_sequence, seconds, service_date=MONDAY, delay=60):
     )
 
 
-def record(db, *predictions):
-    poll = PollRecord(feed="trip_updates", requested_at=SEEN, http_status=200)
+def record(db, *predictions, seen=SEEN):
+    poll = PollRecord(feed="trip_updates", requested_at=seen, http_status=200)
     snapshot = ParsedSnapshot(
-        header_timestamp=SEEN,
+        header_timestamp=seen,
         entity_count=len(predictions),
         predictions=list(predictions),
         skipped_trips=0,
@@ -58,28 +68,29 @@ def count(db, table):
 
 
 def test_matched_predictions_become_observations(db, feed_id):
-    record(db, prediction("T1", 1, 85_800), prediction("T1", 2, 86_730, delay=-30))
+    record(db, prediction("T1", 1, 85_800), seen=at(85_830))
+    record(db, prediction("T1", 2, 86_730, delay=-30), seen=at(86_670))
 
     counts = build_day(db, MONDAY)
 
-    assert counts == MatchCounts(MONDAY, exact=2, shifted=0, unmatched=0)
+    assert counts == MatchCounts(MONDAY, exact=2, shifted=0, unmatched=0, trusted=2)
     rows = db.execute(
-        "SELECT stop_sequence, feed_id, stop_id, delay_seconds, lead_seconds, date_shifted"
-        " FROM stop_observation ORDER BY stop_sequence"
+        "SELECT stop_sequence, feed_id, stop_id, delay_seconds, lead_seconds, date_shifted,"
+        " trusted FROM stop_observation ORDER BY stop_sequence"
     ).fetchall()
     assert rows == [
-        (1, feed_id, "100", 60, 85_860 - 82_800, False),
-        (2, feed_id, "200", -30, 86_700 - 82_800, False),
+        (1, feed_id, "100", 60, 30, False, True),
+        (2, feed_id, "200", -30, 30, False, True),
     ]
 
 
 def test_after_midnight_trip_labeled_next_day_moves_back(db, feed_id):
-    record(db, prediction("T2", 1, 87_000, service_date=TUESDAY))
+    record(db, prediction("T2", 1, 87_000, service_date=TUESDAY), seen=at(87_030))
 
     monday = build_day(db, MONDAY)
     tuesday = build_day(db, TUESDAY)
 
-    assert monday == MatchCounts(MONDAY, exact=0, shifted=1, unmatched=0)
+    assert monday == MatchCounts(MONDAY, exact=0, shifted=1, unmatched=0, trusted=1)
     assert tuesday.unmatched == 0
     row = db.execute("SELECT service_date, date_shifted FROM stop_observation").fetchone()
     assert row == (MONDAY, True)
@@ -90,7 +101,7 @@ def test_prediction_off_schedule_is_unmatched(db, feed_id):
 
     counts = build_day(db, MONDAY)
 
-    assert counts == MatchCounts(MONDAY, exact=0, shifted=0, unmatched=1)
+    assert counts == MatchCounts(MONDAY, exact=0, shifted=0, unmatched=1, trusted=0)
     assert not counts.healthy
     assert count(db, "stop_observation") == 0
 
@@ -116,6 +127,47 @@ def test_builds_from_the_first_unbuilt_date(db, feed_id):
 
 
 def test_more_than_one_percent_unmatched_is_unhealthy():
-    assert MatchCounts(MONDAY, exact=990, shifted=0, unmatched=10).healthy
-    assert not MatchCounts(MONDAY, exact=989, shifted=0, unmatched=11).healthy
-    assert not MatchCounts(MONDAY, exact=0, shifted=0, unmatched=0).healthy
+    assert MatchCounts(MONDAY, exact=990, shifted=0, unmatched=10, trusted=0).healthy
+    assert not MatchCounts(MONDAY, exact=989, shifted=0, unmatched=11, trusted=0).healthy
+    assert not MatchCounts(MONDAY, exact=0, shifted=0, unmatched=0, trusted=0).healthy
+
+
+def test_stale_stops_dropped_together_are_untrusted(db, feed_id):
+    # No bus was tracked: stop 1 was predicted for about "now" while its delay grew to 38
+    # minutes, then both stops dropped out in the same poll.
+    record(
+        db,
+        prediction("T1", 1, 85_800, delay=2_300),
+        prediction("T1", 2, 86_730, delay=2_300),
+        seen=at(88_090),
+    )
+
+    counts = build_day(db, MONDAY)
+
+    assert counts.trusted == 0
+    leads = db.execute("SELECT lead_seconds FROM stop_observation ORDER BY stop_sequence")
+    assert leads.fetchall() == [(10,), (940,)]
+
+
+def test_bus_passing_two_stops_in_one_poll_is_trusted(db, feed_id):
+    record(db, prediction("T3", 1, 28_800), prediction("T3", 2, 28_840), seen=at(28_850))
+
+    counts = build_day(db, MONDAY)
+
+    assert counts.trusted == 2
+
+
+def test_rebuild_range_is_accepted():
+    args = parse_args(["--from", "2026-10-19", "--to", "2026-10-20"])
+
+    assert (args.start, args.end) == (MONDAY, TUESDAY)
+
+
+def test_to_without_from_is_rejected():
+    with pytest.raises(SystemExit):
+        parse_args(["--to", "2026-10-20"])
+
+
+def test_to_before_from_is_rejected():
+    with pytest.raises(SystemExit):
+        parse_args(["--from", "2026-10-20", "--to", "2026-10-19"])

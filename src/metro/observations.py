@@ -35,25 +35,31 @@ DATES_TO_BUILD = """
     ) AS d
 """
 
-# Rows stored under the day that match its schedule, plus rows stored under the next day that
-# match this day's schedule (METRO's next-day label, decision #26). Scheduled times must match to
-# the second.
+# Rows stored under the day that match its schedule, plus rows stored under the next day
+# that match this day's schedule (METRO's next-day label, decision #26). Scheduled times
+# must match to the second. A row is trusted only if every stop of its trip that dropped
+# out of the feed in the same poll was predicted within 2 minutes of that poll (#28).
 INSERT_OBSERVATIONS = """
     WITH candidate AS (
         SELECT trip_id, stop_sequence, scheduled_arrival, predicted_arrival, last_seen_at,
-            service_date <> %(day)s AS date_shifted
+            service_date <> %(day)s AS date_shifted,
+            bool_and(
+                predicted_arrival - last_seen_at
+                    BETWEEN interval '-2 minutes' AND interval '2 minutes'
+            ) OVER (PARTITION BY service_date, trip_id, last_poll_id) AS trusted
         FROM stop_prediction
         WHERE service_date IN (%(day)s, %(day)s + 1)
     )
     INSERT INTO stop_observation (
         service_date, trip_id, stop_sequence, feed_id, route_id, direction_id, stop_id,
-        scheduled_arrival, predicted_arrival, delay_seconds, lead_seconds, date_shifted
+        scheduled_arrival, predicted_arrival, delay_seconds, lead_seconds, date_shifted,
+        trusted
     )
     SELECT %(day)s, c.trip_id, c.stop_sequence, st.feed_id, t.route_id, t.direction_id,
         st.stop_id, c.scheduled_arrival, c.predicted_arrival,
         extract(epoch FROM c.predicted_arrival - c.scheduled_arrival)::integer,
         extract(epoch FROM c.predicted_arrival - c.last_seen_at)::integer,
-        c.date_shifted
+        c.date_shifted, c.trusted
     FROM candidate c
     JOIN gtfs_stop_time st
       ON st.feed_id = gtfs_feed_for(%(day)s)
@@ -65,7 +71,9 @@ INSERT_OBSERVATIONS = """
 """
 
 COUNT_OBSERVATIONS = """
-    SELECT count(*) FILTER (WHERE NOT date_shifted), count(*) FILTER (WHERE date_shifted)
+    SELECT count(*) FILTER (WHERE NOT date_shifted),
+           count(*) FILTER (WHERE date_shifted),
+           count(*) FILTER (WHERE trusted)
     FROM stop_observation
     WHERE service_date = %(day)s
 """
@@ -91,9 +99,10 @@ COUNT_UNMATCHED = """
 """
 
 INSERT_MATCH = """
-    INSERT INTO schedule_match (service_date, feed_id, exact, shifted, unmatched)
+    INSERT INTO schedule_match (service_date, feed_id, exact, shifted, unmatched, trusted)
     VALUES (
-        %(service_date)s, gtfs_feed_for(%(service_date)s), %(exact)s, %(shifted)s, %(unmatched)s
+        %(service_date)s, gtfs_feed_for(%(service_date)s),
+        %(exact)s, %(shifted)s, %(unmatched)s, %(trusted)s
     )
 """
 
@@ -104,6 +113,12 @@ class MatchCounts:
     exact: int
     shifted: int
     unmatched: int
+    trusted: int
+
+    @property
+    def trusted_share(self) -> float:
+        observed = self.exact + self.shifted
+        return self.trusted / observed if observed else 0.0
 
     @property
     def unmatched_share(self) -> float:
@@ -126,9 +141,9 @@ def build_day(conn: psycopg.Connection, day: date) -> MatchCounts:
         conn.execute("DELETE FROM stop_observation WHERE service_date = %(day)s", params)
         conn.execute("DELETE FROM schedule_match WHERE service_date = %(day)s", params)
         conn.execute(INSERT_OBSERVATIONS, params)
-        exact, shifted = conn.execute(COUNT_OBSERVATIONS, params).fetchone()
+        exact, shifted, trusted = conn.execute(COUNT_OBSERVATIONS, params).fetchone()
         unmatched = conn.execute(COUNT_UNMATCHED, params).fetchone()[0]
-        counts = MatchCounts(day, exact, shifted, unmatched)
+        counts = MatchCounts(day, exact, shifted, unmatched, trusted)
         conn.execute(INSERT_MATCH, asdict(counts))
     return counts
 
@@ -141,7 +156,7 @@ def _ping(url: str, healthy: bool) -> None:
         log.warning("health check ping failed: %s", exc)
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Join finished service days to the schedule and check the match rate."
     )
@@ -154,11 +169,16 @@ def main() -> None:
     parser.add_argument(
         "--to", dest="end", type=date.fromisoformat, help="last date to rebuild (default: --from)"
     )
-    args = parser.parse_args()
-    if args.end and args.start:
+    args = parser.parse_args(argv)
+    if args.end and not args.start:
         parser.error("--to needs --from")
     if args.end and args.end < args.start:
         parser.error("--to is before --from")
+    return args
+
+
+def main() -> None:
+    args = parse_args()
 
     load_dotenv()
     logging.Formatter.converter = time.gmtime
@@ -190,12 +210,14 @@ def main() -> None:
             counts = build_day(conn, day)
             log.log(
                 logging.INFO if counts.healthy else logging.WARNING,
-                "built %s: %d exact, %d shifted, %d unmatched (%.2f%%)",
+                "built %s: %d exact, %d shifted, %d unmatched (%.2f%%), %d trusted (%.1f%%)",
                 day,
                 counts.exact,
                 counts.shifted,
                 counts.unmatched,
                 100 * counts.unmatched_share,
+                counts.trusted,
+                100 * counts.trusted_share,
             )
             healthy = healthy and counts.healthy
 
