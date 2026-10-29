@@ -5,7 +5,7 @@ import pytest
 from test_gtfs import FILES, make_zip
 
 from metro.gtfs import load_feed
-from metro.leave_by import parse_clock, recommend, trip_options
+from metro.leave_by import _late, parse_clock, recommend, trip_options
 
 # Weekday trips A (7:00 -> 7:20) and B (7:30 -> 7:50), and Saturday trip C at B's times.
 TRIPS = (
@@ -139,3 +139,10 @@ def test_parses_service_day_clock_times():
     assert parse_clock("24:30") == 88_200
     with pytest.raises(argparse.ArgumentTypeError):
         parse_clock("8:75")
+
+
+def test_delays_round_up_like_arrival_time():
+    assert _late(510) == "+9 min"
+    assert _late(480) == "+8 min"
+    assert _late(-90) == "-1 min"
+    assert _late(None) == "-"
