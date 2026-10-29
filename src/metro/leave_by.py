@@ -150,7 +150,7 @@ def _clock(seconds: int, round_up: bool = False) -> str:
 
 
 def _late(delay: int | None) -> str:
-    return "-" if delay is None else f"{delay / 60:+.0f} min"
+    return "-" if delay is None else f"{-(-delay // 60):+d} min"
 
 
 def main() -> None:
