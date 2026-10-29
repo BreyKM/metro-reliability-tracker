@@ -19,7 +19,7 @@ Running 24/7 on a VPS since October 16, 2026. As of October 19:
 
 That's 1.17 million trip-stop predictions across 106 routes, 8,903 stops, and 17,342 trips, plus 375,748 GPS positions. A rush-hour snapshot has about 26,700 predictions and takes about 4 seconds to process.
 
-The headline feature, the leave-by query, is next. It needs a few weeks of history to say anything meaningful.
+The leave-by query works from the command line. Answers based on fewer than 20 days are flagged until there's more history.
 
 ## What it measures (and what it doesn't)
 
@@ -59,11 +59,12 @@ uv run metro-migrate
 uv run metro-load-gtfs path/to/gtfs.zip --effective-from YYYY-MM-DD
 uv run pytest
 uv run metro-collector        # or: uv run metro-collector vehicles
+uv run metro-leave-by --route 082 --from STOP_ID --to STOP_ID --arrive-by 08:30
 ```
 
 ## What's next
 
 - Download new schedule versions automatically
-- The leave-by query: percentile delays by stop, route, hour, and weekday, served through FastAPI
+- Serve the leave-by query through FastAPI
 - Measured arrivals from GPS, compared against METRO's predictions
 - A small React front end
