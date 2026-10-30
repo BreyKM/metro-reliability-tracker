@@ -19,7 +19,7 @@ Running 24/7 on a VPS since October 16, 2026. As of October 19:
 
 That's 1.17 million trip-stop predictions across 106 routes, 8,903 stops, and 17,342 trips, plus 375,748 GPS positions. A rush-hour snapshot has about 26,700 predictions and takes about 4 seconds to process.
 
-The leave-by query works from the command line. Answers based on fewer than 20 days are flagged until there's more history.
+The leave-by query works from the command line and through a read-only API. Answers based on fewer than 20 days are flagged until there's more history.
 
 ## What it measures (and what it doesn't)
 
@@ -32,11 +32,12 @@ That's a **last prediction, not a measured arrival**. When METRO is tracking the
 - **Collector:** one Python process per feed, polling every 30 seconds on a fixed schedule. Every attempt is logged to a `poll` table, including failures and rate limits, so any gap in the data is visible and explained.
 - **Storage:** PostgreSQL 18. Predictions are upserted at one row per (service date, trip, stop), and an upsert can only move forward in time, so reprocessing old data can't overwrite newer data. GPS positions are append-only.
 - **Schedule:** METRO's static GTFS is loaded with `COPY`, one full version per schedule change. A daily job joins each finished day's predictions to the schedule that was in effect, corrects METRO's date label on after-midnight trips, and alerts me if more than 1% don't match.
+- **API:** FastAPI, read-only, with every query limited to 5 seconds so it can't slow down collection. It answers the leave-by query and looks up stops and routes.
 - **Raw data:** every snapshot is saved gzipped for about a week, so the database can be rebuilt if a bug is found.
 - **Operations:** Docker Compose for Postgres, systemd for the collectors, nightly backups to Backblaze B2 (restore tested), and external monitoring that emails me if new data stops arriving.
 - **Code quality:** pytest against a real Postgres in CI, including tests on recorded METRO snapshots; ruff for linting and formatting.
 
-Built with Python, protobuf (`gtfs-realtime-bindings`), psycopg 3 with hand-written SQL, PostgreSQL, Docker, systemd, and GitHub Actions.
+Built with Python, protobuf (`gtfs-realtime-bindings`), psycopg 3 with hand-written SQL, FastAPI, PostgreSQL, Docker, systemd, and GitHub Actions.
 
 ## Related work
 
@@ -60,11 +61,12 @@ uv run metro-load-gtfs path/to/gtfs.zip --effective-from YYYY-MM-DD
 uv run pytest
 uv run metro-collector        # or: uv run metro-collector vehicles
 uv run metro-leave-by --route 082 --from STOP_ID --to STOP_ID --arrive-by 08:30
+uv run uvicorn metro.api:app --reload #API docs at http://127.0.0.1:8000/docs
 ```
 
 ## What's next
 
 - Download new schedule versions automatically
-- Serve the leave-by query through FastAPI
+- Run the API in Docker on the server
 - Measured arrivals from GPS, compared against METRO's predictions
 - A small React front end
