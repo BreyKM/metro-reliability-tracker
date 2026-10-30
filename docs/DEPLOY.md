@@ -167,7 +167,7 @@ The script runs as root from a root-owned copy, not from the repo, because the r
 healthchecks.io has four checks:
 - `metro-collector`: period 1 minute, grace 10 minutes. The TripUpdates collector pings it after recording a new snapshot (at most once a minute).
 - `metro-vehicles`: period 1 minute, grace 10 minutes. The Vehicles collector pings it the same way.
-- `metro-backup`: period 1 day, grace 2 hours. `backup.sh` pings it after a successful upload.
+- `metro-backup`: period 1 day, grace 2 hours. `backup.sh` pings it after a successful upload, with the free disk space as the message. It pings `/fail` if less than 10 GB is free.
 - `metro-observations`: period 1 day, grace 3 hours. The schedule join pings it after building; it pings `/fail` (an immediate alert) if more than 1% of a day's predictions don't match the schedule, or a day has none.
 
 Add the ping URLs (secret; anyone with them can ping):
@@ -277,10 +277,10 @@ ORDER BY requested_at DESC LIMIT 20;
 cd /opt/metro/app
 sudo rclone --config /etc/metro/rclone.conf copy b2backup:B2_BUCKET/daily /tmp/restore-test --max-age 2d
 sudo docker compose exec postgres createdb -U metro_app metro_restore_test
-sudo docker compose exec -T postgres pg_restore -U metro_app -d metro_restore_test --no-owner < /tmp/restore-test/metro-YYYY-MM-DDTHHMMSSZ.dump.dump
+sudo docker compose exec -T postgres pg_restore -U metro_app -d metro_restore_test --no-owner < /tmp/restore-test/metro-YYYY-MM-DDTHHMMSSZ.dump
 ```
 
-Compare `count(*)` of `poll` and `stop_prediction` with the live database, then:
+Compare `count(*)` of `poll` and `stop_prediction` with the live database (`stop_observation` and `schedule_match` are empty in a backup), then:
 
 ```bash
 sudo docker compose exec postgres dropdb -U metro_app metro_restore_test
@@ -302,6 +302,7 @@ sudo rm -rf /tmp/restore-test
    ```
 4. Run `metro-migrate` to apply any migrations newer than the backup.
 5. Sections 4–6 (skipping the rclone setup already done).
+6. Section 8. Backups leave out `stop_observation` and `schedule_match`, so the first run of `metro-build-observations` rebuilds every finished day.
 
 Data between the last backup and the rebuild is lost and shows as a gap in `poll`.
 
