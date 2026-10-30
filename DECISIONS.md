@@ -179,7 +179,8 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Decision:** A root systemd timer runs `pg_dump --format=custom` inside the Postgres container at 08:00 UTC, checks the dump with `pg_restore --list`, keeps 3 days locally, and uploads it to a private Backblaze B2 bucket. A bucket lifecycle rule deletes uploads after about 30 days. The B2 key is limited to that one bucket and stored in root-only `/etc/metro/`. The script runs from a root-owned copy in `/usr/local/sbin`, not from the repo checkout. I restored a downloaded backup into a scratch database and matched its row counts against the live database.  
 **Why:** The collected data can't be re-collected, and OVH's included backup is stored with the same provider. B2 costs $6.95/TB/month with 10 GB free, and downloads are free up to 3× storage, which covers occasional restores. Cloudflare R2 has free downloads but charges about twice as much for storage. Running root-executed code from a folder the `metro` user can write would let a compromised collector become root.  
 **Tradeoff:** Up to a day of data could be lost (the time since the last backup). The key can delete files in its bucket, so a compromised server could erase backups.  
-**Revisit if:** The dataset becomes valuable enough to need less than a day of loss (then use continuous WAL archiving), or to justify an upload-only key so the server can't delete backups.
+**Revisit if:** The dataset becomes valuable enough to need less than a day of loss (then use continuous WAL archiving), or to justify an upload-only key so the server can't delete backups.  
+**Update 2026-10-29:** Backups leave out the data in `stop_observation` and `schedule_match`. Both are built entirely from `stop_prediction` and the schedule, which are backed up, so a restore rebuilds them with one run of `metro-build-observations` (#27).
 
 ## 22. External monitoring with healthchecks.io
 
@@ -187,7 +188,8 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Decision:** The collector pings a healthchecks.io check after recording a new snapshot, at most once a minute, from a separate HTTP client with no headers. The nightly backup pings a second check after a successful upload. healthchecks.io emails me when pings stop (collector: 1 minute period + 10 minute grace; backup: 1 day + 2 hours).  
 **Why:** The failures that cost the most data are the ones nothing reports: a revoked API key (polls keep logging 401s), a frozen feed (every poll "unchanged"), or the server being down. Monitoring from outside catches all of them, because it only cares that new data keeps arriving. A separate client keeps the METRO API key from being sent to the monitor. A failed ping is only logged, so monitoring can never stop collection.  
 **Tradeoff:** It depends on a third-party service, and the ping URLs are secrets to manage. A real outage shorter than 11 minutes won't alert.  
-**Revisit if:** I need alerts on other signals (slow polls, disk filling up). healthchecks.io can receive those too, or a full metrics setup would.
+**Revisit if:** I need alerts on other signals (slow polls, disk filling up). healthchecks.io can receive those too, or a full metrics setup would.  
+**Update 2026-10-29:** The nightly backup now sends the free disk space with its ping, and pings `/fail` under 10 GB. At about 0.5 GB/day that's around three weeks of warning.
 
 ## 23. One collector process per feed
 
