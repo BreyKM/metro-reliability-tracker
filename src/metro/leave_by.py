@@ -144,13 +144,20 @@ def parse_clock(value: str) -> int:
     return hours * 3600 + minutes * 60
 
 
-def _clock(seconds: int, round_up: bool = False) -> str:
+def clock(seconds: int, round_up: bool = False) -> str:
+    """HH:MM on the service-day clock, rounded down unless round_up."""
     minutes = -(-seconds // 60) if round_up else seconds // 60
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
+def late_minutes(delay: int | None) -> int | None:
+    """Whole minutes late, rounded up like arrival times."""
+    return None if delay is None else -(-delay // 60)
+
+
 def _late(delay: int | None) -> str:
-    return "-" if delay is None else f"{-(-delay // 60):+d} min"
+    minutes = late_minutes(delay)
+    return "-" if minutes is None else f"{minutes:+d} min"
 
 
 def main() -> None:
@@ -180,17 +187,17 @@ def main() -> None:
     origin, destination = names[args.from_stop], names[args.to_stop]
     print(
         f"Route {args.route}, {args.day}, {origin} to {destination}, "
-        f"arrive by {_clock(args.arrive_by)}\n"
+        f"arrive by {clock(args.arrive_by)}\n"
     )
     if not options:
         sys.exit("No scheduled trips in the 90 minutes before that.")
 
     print("  Leaves  Arrives  Late p50  Late p90  Arrives p90  Days")
     for o in options:
-        p90 = "-" if o.p90_arrival is None else _clock(o.p90_arrival, round_up=True)
+        p90 = "-" if o.p90_arrival is None else clock(o.p90_arrival, round_up=True)
         flag = " (low data)" if o.low_data else ""
         print(
-            f"  {_clock(o.leave_from)}   {_clock(o.arrive_at)}    {_late(o.p50_delay):>8}"
+            f"  {clock(o.leave_from)}   {clock(o.arrive_at)}    {_late(o.p50_delay):>8}"
             f"  {_late(o.p90_delay):>8}  {p90:<11}  {o.arrival_n}{flag}"
         )
 
@@ -199,6 +206,6 @@ def main() -> None:
         print(f"\nNone of these reached {destination} by the deadline on 90% of days.")
         return
     print(
-        f"\nTake the {_clock(best.leave_from)}: be at {origin} by {_clock(best.be_at_stop)}. "
-        f"On 90% of days it reached {destination} by {_clock(best.p90_arrival, round_up=True)}."
+        f"\nTake the {clock(best.leave_from)}: be at {origin} by {clock(best.be_at_stop)}. "
+        f"On 90% of days it reached {destination} by {clock(best.p90_arrival, round_up=True)}."
     )

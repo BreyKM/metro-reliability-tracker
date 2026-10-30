@@ -247,6 +247,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** The boarding and arrival percentiles are computed separately, using every trusted visit at each stop, so "be at the stop" and "arrives by" each hold on 90% of days but not necessarily on the same days. When a new schedule changes a trip's times, its history starts over. With 20 days, the 90th percentile is set by the two or three worst ones, so it moves noticeably as data comes in. Single route only, no transfers. Canceled trips may not appear in TripUpdates at all (#1), so the answer is about trips that ran.  
 **Revisit if:** Answers need transfers, a trip's history needs to survive small time changes, or cancellations become measurable.  
 
+## 30. A read-only FastAPI service for the leave-by query
+
+**Date:** 2026-10-29  
+**Decision:** `metro.api` is a FastAPI app with four GET endpoints: `/health`, `/stops` (search by name), `/routes` (routes that run from one stop to another, in that direction), and `/leave-by`. It reuses the queries in `leave_by.py`. Times come back as `HH:MM`, already rounded by #29's rules, and delays as whole minutes rounded up. Endpoints are plain functions using a pool of 1–4 psycopg connections, and every connection is read-only with a 5-second statement timeout. An index on `gtfs_stop_time (feed_id, stop_id)` serves the stop lookups.  
+**Why:** FastAPI validates parameters from type hints and documents every endpoint at `/docs`. Rounding is part of what an answer means (#29), so it stays in one place instead of being redone in the front end. psycopg is used synchronously everywhere in this project; FastAPI runs plain functions in a thread pool, so a slow query doesn't block other requests. The API shares the database with collectors that can't miss polls, so it can't write and can't run a long query. Without the index, finding the trips that serve one stop read all 1.4 million stop times in the schedule (703 ms).  
+**Tradeoff:** A front end that wants different rounding or units needs an API change. Stop search is a plain substring match, and stops on opposite sides of a street share a name; `/routes` is what tells them apart. There's no authentication or rate limiting, so it isn't meant to be public.  
+**Revisit if:** The API needs to be public (then authentication, rate limits, and CORS), or a client needs raw seconds.
+
 ## Not decided yet
 
 - **Which Vehicles row is the current trip** when a bus has two rows.
