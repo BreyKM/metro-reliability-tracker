@@ -61,7 +61,7 @@ uv run metro-load-gtfs path/to/gtfs.zip --effective-from YYYY-MM-DD
 uv run pytest
 uv run metro-collector        # or: uv run metro-collector vehicles
 uv run metro-leave-by --route 082 --from STOP_ID --to STOP_ID --arrive-by 08:30
-uv run uvicorn metro.api:app --reload #API docs at http://127.0.0.1:8000/docs
+uv run uvicorn metro.api:app --reload   # API docs at http://127.0.0.1:8000/docs
 ```
 
 ## What's next
