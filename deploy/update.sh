@@ -57,6 +57,11 @@ for service in "${SERVICES[@]}"; do
     fi
 done
 
+docker compose up -d --build --no-deps api
+curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health > /dev/null \
+    || { echo "api is not answering after the rebuild" >&2; exit 1; }
+echo "api is up"
+
 if [[ -n "$deployed" ]]; then
     changed=$(as_metro git -C "$APP" diff --name-only "$deployed" "$new" -- deploy/)
     if [[ -n "$changed" ]]; then
