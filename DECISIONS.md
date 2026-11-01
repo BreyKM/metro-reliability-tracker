@@ -255,6 +255,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** A front end that wants different rounding or units needs an API change. Stop search is a plain substring match, and stops on opposite sides of a street share a name; `/routes` is what tells them apart. There's no authentication or rate limiting, so it isn't meant to be public.  
 **Revisit if:** The API needs to be public (then authentication, rate limits, and CORS), or a client needs raw seconds.
 
+## 32. A small React front end, run locally
+
+**Date:** 2026-10-31  
+**Decision:** `web/` is a one-page React app in TypeScript, built with Vite. In development, Vite forwards `/api` to the API on `127.0.0.1:8000`, so the browser only ever talks to one origin. State is plain `useState`, and anything that can be worked out from other state, like the selected route, is computed on each render instead of stored. Columns say "Usually late" and "Late 9 days in 10" instead of p50 and p90, and early buses show as "2 min early". Styling is one plain CSS file with light and dark colors. Tests use Vitest and Testing Library, with the API module mocked.  
+**Why:** The page is one form and one answer, so a router, a state library, or a component kit would be more code than the page itself. React and TypeScript are the most widely used front-end stack, which matters for a portfolio project, and types that mirror the API's responses catch a misspelled field at build time. A stored route list has to be reset whenever a stop changes; until it is, the page shows routes for the wrong stops. A computed one can't go stale. Riders don't think in percentiles.  
+**Tradeoff:** It only runs through Vite's dev server; nothing serves a production build yet. `<input type="time">` can't express after-midnight service times like 24:30, so late-night trips can't be asked about. The types in `api.ts` are written by hand, so if the API's responses change, nothing catches it until the page breaks.  
+**Revisit if:** The page needs to be public (then serve the build, and #30's authentication and rate limits apply), after-midnight trips need answers, or the API changes often enough that its types should be generated from its OpenAPI schema.
+
 ## Not decided yet
 
 - **Which Vehicles row is the current trip** when a bus has two rows.
