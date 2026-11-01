@@ -30,7 +30,7 @@ export default function App() {
         if (current) {
           setRoutes({ pair: `${from.stop_id}>${to.stop_id}`, list })
           setError(null)
-        } 
+        }
       })
       .catch((e: Error) => {
         if (current) setError(e.message)
