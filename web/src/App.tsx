@@ -27,7 +27,10 @@ export default function App() {
     let current = true
     routesBetween(from.stop_id, to.stop_id)
       .then((list) => {
-        if (current) setRoutes({ pair: `${from.stop_id}>${to.stop_id}`, list })
+        if (current) {
+          setRoutes({ pair: `${from.stop_id}>${to.stop_id}`, list })
+          setError(null)
+        } 
       })
       .catch((e: Error) => {
         if (current) setError(e.message)
@@ -81,7 +84,7 @@ export default function App() {
         <StopPicker label="From" value={from} onChange={setFrom} />
         <StopPicker label="To" value={to} onChange={setTo} />
 
-        {pair && routeList === null && <p className="hint">Finding routes...</p>}
+        {pair && routeList === null && !error && <p className="hint">Finding routes...</p>}
         {routeList?.length === 0 && (
           <p className="error">
             No route runs from {from?.name} to {to?.name} in that direction. Stops on opposite sides
