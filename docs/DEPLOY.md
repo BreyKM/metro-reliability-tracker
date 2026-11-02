@@ -235,12 +235,13 @@ sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backu
 
 ```bash
 cd /opt/metro/app
+sudo docker compose exec postgres psql -U metro_app -d metro -c "CHECKPOINT"
 sudo docker compose up -d --wait postgres
 sudo docker compose exec postgres psql -U metro_app -d metro -c "SHOW shared_buffers" -c "SHOW checkpoint_timeout"
 sudo journalctl -u metro-collector --since "-2 min" --no-pager
 ```
 
-While Postgres restarts, the collectors fetch nothing (#19), so do it at a quiet hour. Expect one or two failed polls in the journal, then normal ones. If `--wait` fails, `sudo docker compose logs postgres --tail 20` shows why; Postgres stops on a misspelled setting.
+While Postgres restarts, the collectors fetch nothing (#19), so do it at a quiet hour. Expect one or two failed polls in the journal, then normal ones. If `--wait` fails, `sudo docker compose logs postgres --tail 20` shows why; Postgres stops on a misspelled setting. The `CHECKPOINT` first writes out changed pages while Postgres is still running, so the shutdown is quick.
 
 ### Load a new GTFS schedule version
 
