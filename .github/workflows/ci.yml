@@ -74,3 +74,16 @@ jobs:
 
           - name: Build
             run: npm run build
+
+    postgres-settings:
+        runs-on: ubuntu-latest
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Start Postgres with the server's settings
+              run: docker compose up --wait --wait-timeout 60 postgres
+
+            - name: Show the settings
+              run: docker compose exec -T postgres psql -U metro_app -d metro -v ON_ERROR_STOP=1 -c "SHOW shared_buffers" -c "SHOW checkpoint_timeout" -c "SHOW max_wal_size" -c "SHOW wal_compression"

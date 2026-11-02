@@ -263,6 +263,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** It only runs through Vite's dev server; nothing serves a production build yet. `<input type="time">` can't express after-midnight service times like 24:30, so late-night trips can't be asked about. The types in `api.ts` are written by hand, so if the API's responses change, nothing catches it until the page breaks.  
 **Revisit if:** The page needs to be public (then serve the build, and #30's authentication and rate limits apply), after-midnight trips need answers, or the API changes often enough that its types should be generated from its OpenAPI schema.
 
+## 33. Postgres settings for a write-heavy database
+
+**Date:** 2026-11-02  
+**Decision:** Postgres runs with `shared_buffers=2GB`, `checkpoint_timeout=15min`, `max_wal_size=4GB`, and `wal_compression=lz4`, set in `compose.yaml`. Everything else stays at the defaults.  
+**Why:** In its first 14.8 days the database wrote about 1 TB to disk (about 69 GB a day) while growing about 0.5 GB a day. Most of that was write-ahead log, and about 80% of the log was full-page images: the first change to a page after each checkpoint logs the whole 8 KB page, and with the defaults a checkpoint ran every 5 minutes. `stop_prediction` updates each row about 87 times, so the same pages were logged in full again every cycle. Checkpoints three times further apart log each busy page a third as often, and lz4 compresses the images that are still logged. With 1 GB of log allowed between checkpoints, busy hours forced 116 checkpoints early, and that count was rising; 4 GB leaves room. The default 128 MB cache is small for 8 GB of RAM, and a quarter of RAM is the usual starting point.  
+**Tradeoff:** After a crash, Postgres replays up to 15 minutes of log instead of 5, so recovery takes longer. The log directory can use about 4 GB of disk. Changing `shared_buffers` needs a restart, and while Postgres is down the collectors fetch nothing (#19), so one or two polls are missed; it's done at a quiet hour. lz4 costs a little CPU for each page it logs.  
+**Revisit if:** The measured reduction is small (then most writes are elsewhere: autovacuum, or updates that can't be HOT, which fillfactor addresses), or other services need the memory.
+
 ## Not decided yet
 
 - **Which Vehicles row is the current trip** when a bus has two rows.
