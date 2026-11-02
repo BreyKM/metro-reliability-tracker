@@ -18,6 +18,8 @@ services:
       -c checkpoint_timeout=15min
       -c max_wal_size=4GB
       -c wal_compression=lz4
+    # A clean shutdown writes out every changed page, up to 2GB; Docker's default 10 s can cut it off.
+    stop_grace_period: 2m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U metro_app -d metro"]
       interval: 10s
