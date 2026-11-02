@@ -229,6 +229,19 @@ sudo cp deploy/<unit> /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup
 ```
 
+### Changed Postgres settings in `compose.yaml`
+
+`metro-update` doesn't restart Postgres. Recreate the container, then check the settings took:
+
+```bash
+cd /opt/metro/app
+sudo docker compose up -d --wait postgres
+sudo docker compose exec postgres psql -U metro_app -d metro -c "SHOW shared_buffers" -c "SHOW checkpoint_timeout"
+sudo journalctl -u metro-collector --since "-2 min" --no-pager
+```
+
+While Postgres restarts, the collectors fetch nothing (#19), so do it at a quiet hour. Expect one or two failed polls in the journal, then normal ones. If `--wait` fails, `sudo docker compose logs postgres --tail 20` shows why; Postgres stops on a misspelled setting.
+
 ### Load a new GTFS schedule version
 
 When METRO publishes a new schedule, download it and load it with the first service date it applies to. Loading the same zip twice does nothing.
