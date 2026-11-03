@@ -13,9 +13,10 @@ from dotenv import load_dotenv
 ON_TIME = {"early": -60, "late": 300, "very_late": 600}
 
 # One row per stop visit, labeled the way the dashboard groups them. The day type comes from the
-# trip's service calendar, like the leave-by query (#29), and the hour is the scheduled arrival's
-# hour in Houston. Only trusted visits (#28) count as early, on time, or late; the rest only count
-# as visits, so the dashboard can show how much of the service is covered.
+# trip's service calendar, like the leave-by query (#29), and the hour is counted from the start of
+# the service day the way GTFS does, so a trip after midnight is at hour 24 or later. Only trusted
+# visits (#28) count as early, on time, or late; the rest only count as visits, so the dashboard
+# can show how much of the service is covered.
 VISITS = """
     WITH day_type AS (
         SELECT feed_id, service_id,
@@ -27,8 +28,10 @@ VISITS = """
     ),
     visit AS (
         SELECT so.service_date, dt.day_type, so.route_id, so.stop_id,
-            extract(hour FROM so.scheduled_arrival AT TIME ZONE 'America/Chicago')::integer
-                AS hour,
+            floor(
+                extract(epoch FROM so.scheduled_arrival - service_day_start(so.service_date))
+                / 3600
+            )::integer AS hour,
             so.trusted::integer AS trusted,
             (so.trusted AND so.delay_seconds < %(early)s)::integer AS early,
             (so.trusted AND so.delay_seconds BETWEEN %(early)s AND %(late)s)::integer
@@ -106,7 +109,7 @@ def export(conn: psycopg.Connection, out_dir: Path) -> dict[str, int]:
     with conn.transaction():
         # One snapshot, so a daily build finishing mid-export can't make the files disagree.
         conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-        # Reading every observation takes longer than the API role's 5-second limit (#30).
+        # Reading every observation can take longer than the API role's 5-second limit (#30).
         conn.execute("SET LOCAL statement_timeout = '2min'")
         return {name: write_csv(conn, query, out_dir / name) for name, query in FILES.items()}
 

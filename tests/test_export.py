@@ -61,6 +61,19 @@ def test_day_type_comes_from_the_service_calendar(db, feed, tmp_path):
     ]
 
 
+def test_after_midnight_visits_stay_with_their_service_day(db, tmp_path):
+    trips = TRIPS + "076,1,D,0,\n"
+    stop_times = STOP_TIMES + "D,24:10:00,24:10:00,100,1,1\nD,24:30:00,24:30:00,200,2,1\n"
+    raw = make_zip(trips=trips, stop_times=stop_times, calendar=CALENDAR)
+    load_feed(db, raw, "test.zip", date(2026, 10, 8))
+    observe(db, WEEKDAYS[0], "D", 2, 0)
+
+    export(db, tmp_path)
+    rows = read(tmp_path / "route_hour.csv")
+
+    assert [(r["service_date"], r["hour"]) for r in rows] == [(str(WEEKDAYS[0]), "24")]
+
+
 def test_names_come_from_the_newest_schedule(db, feed, tmp_path):
     renamed = FILES["routes"].replace("Evergreen", "Evergreen Express")
     load_feed(db, make_zip(routes=renamed), "new.zip", date(2026, 11, 1))
