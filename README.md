@@ -34,6 +34,7 @@ That's a **last prediction, not a measured arrival**. When METRO is tracking the
 - **Schedule:** METRO's static GTFS is loaded with `COPY`, one full version per schedule change. A daily job joins each finished day's predictions to the schedule that was in effect, corrects METRO's date label on after-midnight trips, and alerts me if more than 1% don't match.
 - **API:** FastAPI, read-only, with every query limited to 5 seconds so it can't slow down collection. It answers the leave-by query and looks up stops and routes.
 - **Front end:** React and TypeScript, built with Vite. Pick two stops, a route, a day, and an arrival time, and it shows which bus to take and how each trip has actually run, in plain words instead of percentiles.
+- **Dashboard data:** `metro-export` writes on-time counts by route, hour, and stop as CSV files for Tableau. They're counts rather than percentages, so any filter in Tableau still adds up correctly.
 - **Raw data:** every snapshot is saved gzipped for about a week, so the database can be rebuilt if a bug is found.
 - **Operations:** Docker Compose for Postgres, systemd for the collectors, nightly backups to Backblaze B2 (restore tested), and external monitoring that emails me if new data stops arriving.
 - **Code quality:** pytest against a real Postgres in CI, including tests on recorded METRO snapshots; ruff for linting and formatting. The front end has Vitest and Testing Library tests, ESLint, and Prettier.
@@ -62,6 +63,7 @@ uv run metro-load-gtfs path/to/gtfs.zip --effective-from YYYY-MM-DD
 uv run pytest
 uv run metro-collector        # or: uv run metro-collector vehicles
 uv run metro-leave-by --route 082 --from STOP_ID --to STOP_ID --arrive-by 08:30
+uv run metro-export           # CSV files for Tableau, in data/tableau/
 uv run uvicorn metro.api:app --reload   # API docs at http://127.0.0.1:8000/docs
 ```
 
@@ -78,3 +80,4 @@ npm run dev                   # http://localhost:5173
 - Download new schedule versions automatically
 - Run the API in Docker on the server
 - Measured arrivals from GPS, compared against METRO's predictions
+- A Tableau dashboard of on-time performance by route, hour, and stop
