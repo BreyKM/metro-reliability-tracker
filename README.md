@@ -1,4 +1,4 @@
-# Houston METRO Reliability Tracker
+# Houston METRO\* Reliability Tracker
 
 METRO's realtime feed tells you where a bus is right now. Nothing tells you whether that bus is usually late. This project records METRO's live feeds around the clock to build the history that doesn't exist anywhere else, and to answer a rider's question no transit app does: *what time should I leave to make it with 90% confidence?*
 
@@ -81,3 +81,11 @@ npm run dev                   # http://localhost:5173
 - Run the API in Docker on the server
 - Measured arrivals from GPS, compared against METRO's predictions
 - A Tableau dashboard of on-time performance by route, hour, and stop
+
+## Data and attribution
+
+Route and arrival data provided by permission of METRO.
+
+\* METRO is the registered trademark of the Metropolitan Transit Authority of Harris County, Texas. All rights reserved.
+
+This is an independent project, not affiliated with or endorsed by METRO.
