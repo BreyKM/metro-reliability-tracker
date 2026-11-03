@@ -130,6 +130,8 @@ export default function App() {
 
       {error && <p className="error">{error}</p>}
       {answer && <Result answer={answer} />}
+
+      <footer className="hint">Route and arrival data provided by permission of METRO</footer>
     </main>
   )
 }
