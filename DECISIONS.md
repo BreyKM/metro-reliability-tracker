@@ -279,6 +279,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** The dashboard is only as current as the last export, on top of #27's two days. Every run reads the whole observation table, so it gets slower as data grows. A late bus counts in the hour it was scheduled, not the hour it arrived. The 10-minute line for "very late" is my own choice, not METRO's. On-time shares describe trusted visits only, so the coverage caveat from #28 applies to the dashboard too. Hours run past 23, so the dashboard has to label 24 and up as after midnight.  
 **Revisit if:** An export takes more than about a minute (then export only new dates, or keep daily summary tables in the database), the dashboard needs fresher data, or it needs a percentile (then compute it in SQL for a fixed grouping).
 
+## 35. Trips seen vs. scheduled
+
+**Date:** 2026-11-03  
+**Decision:** `metro-export` also writes `trips.csv`: for each service date, day type, and bus route, how many trips the schedule had and how many appeared in the feed at all. A date's scheduled trips come from the schedule version in effect (#25), its weekly calendar within its date range, and its exceptions, which remove or add services. A trip counts as seen if it has at least one stop observation. Buses only. Dates run from the first observation to the last.  
+**Why:** On-time % only describes trips that appeared, so a trip that never shows up can't be late. On Tuesday 10/27, 95% of scheduled bus trips appeared, but small routes like Quitman, Hammerly, and Manchester–Lawndale were missing about half of theirs. On Saturday 10/31, with the schedule unchanged, 78% appeared, against 94.5% the Saturday before, and on-time % that day went up. Like the other files, these are counts, so Tableau can add them up under any filter.  
+**Tradeoff:** A missing trip was either canceled or ran without METRO tracking it. TripUpdates and the GPS feed both come from METRO's tracking system, so they go missing together and can't tell the two apart. That's why the measure is "seen", not "ran". A trip counts as seen even if only one of its stops appeared. The first date is partial; collection started on the afternoon of 10/16.  
+**Revisit if:** Cancellations become measurable, for example through the Arrivals endpoint's cancellation flag (#1); then canceled and untracked trips can be counted separately.
+
 ## Not decided yet
 
 - **Which Vehicles row is the current trip** when a bus has two rows.
