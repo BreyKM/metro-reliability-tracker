@@ -222,7 +222,7 @@ A restart causes a short gap (usually no missed poll).
 
 ### Changed a file in `deploy/`
 
-Unit files and the backup script are **copied**, so `git pull` alone doesn't change what runs:
+Unit files and the scripts are **copied**, so `git pull` alone doesn't change what runs:
 
 ```bash
 sudo cp deploy/<unit> /etc/systemd/system/ && sudo systemctl daemon-reload
