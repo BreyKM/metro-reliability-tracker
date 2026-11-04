@@ -226,7 +226,7 @@ Checked with `scripts/inspect_gtfs.py` against two TripUpdates snapshots:
   The scheduled and predicted times are correct; only the date label is off. On 2026-10-25, all 398,230 predictions joined to the schedule, 392,894 matched on their stored date, and the other 5,336 (68 Saturday-only trips) matched one day earlier.
 - 270 trips visit one stop twice (loops on routes 309 and 310, the Gulfton Circulators, and 076 Evergreen), so (trip_id, stop_id) isn't unique; join on (trip_id, stop_sequence) within the schedule version.
 - Checked against 10 days of collected data (2026-10-26): every (service_date, trip_id, stop_id) with more than one stop_sequence is on route 076, 309, or 310, so realtime numbering hasn't shifted between polls. The two rows are two real visits.
-
+- **METRORail isn't in TripUpdates.** On Tuesday 10/27, none of the 767 scheduled rail trips (Red, Purple, and Green lines, `route_type` 0) appeared. Bus-only analyses filter on `route_type = 3`.
 
 ## IDs across APIs
 
