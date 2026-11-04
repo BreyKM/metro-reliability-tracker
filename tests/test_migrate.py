@@ -31,3 +31,11 @@ def test_migrations_create_tables(db):
 def test_rerunning_migrations_applies_nothing(database_url):
     with psycopg.connect(database_url, autocommit=True) as conn:
         assert apply_migrations(conn) == []
+
+
+def test_stop_prediction_leaves_room_for_updates(db):
+    (options,) = db.execute(
+        "SELECT reloptions FROM pg_class WHERE oid = 'stop_prediction'::regclass"
+    ).fetchone()
+
+    assert "fillfactor=50" in options
