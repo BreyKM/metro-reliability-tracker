@@ -35,7 +35,7 @@ if [[ "$new" == "$deployed" ]]; then
 fi
 if [[ -n "$deployed" ]]; then
     echo "deploying ${deployed:0:7} -> ${new:0:7}"
-    as_metro git -C "$APP" log --oneline "$deployed..$new"
+    as_metro git --no-pager -C "$APP" log --oneline "$deployed..$new"
 else
     echo "deploying ${new:0:7} (no record of a previous deploy)"
 fi
