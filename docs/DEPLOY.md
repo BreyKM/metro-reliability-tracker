@@ -227,6 +227,7 @@ Unit files and the backup script are **copied**, so `git pull` alone doesn't cha
 ```bash
 sudo cp deploy/<unit> /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup
+sudo install -m 750 -o root -g root deploy/update.sh /usr/local/sbin/metro-update
 ```
 
 ### Changed Postgres settings in `compose.yaml`
