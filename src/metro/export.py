@@ -1,4 +1,4 @@
-"""Write on-time counts for the Tableau dashboard as CSV files (decisions #24, #34)."""
+"""Write on-time counts for the Tableau dashboard as CSV files (decisions #24, #34, #35)."""
 
 import argparse
 import csv
@@ -12,12 +12,9 @@ from dotenv import load_dotenv
 # On time is no more than 1 minute early and no more than 5 minutes late (decision #24).
 ON_TIME = {"early": -60, "late": 300, "very_late": 600}
 
-# One row per stop visit, labeled the way the dashboard groups them. The day type comes from the
-# trip's service calendar, like the leave-by query (#29), and the hour is counted from the start of
-# the service day the way GTFS does, so a trip after midnight is at hour 24 or later. Only trusted
-# visits (#28) count as early, on time, or late; the rest only count as visits, so the dashboard
-# can show how much of the service is covered.
-VISITS = """
+# The day type comes from the trip's service calendar, like the leave-by query (#29), so a
+# holiday on a Sunday schedule counts as a Sunday.
+WITH_DAY_TYPE = """
     WITH day_type AS (
         SELECT feed_id, service_id,
             CASE WHEN monday OR tuesday OR wednesday OR thursday OR friday THEN 'weekday'
@@ -25,7 +22,16 @@ VISITS = """
                  WHEN sunday THEN 'sunday'
             END AS day_type
         FROM gtfs_calendar
-    ),
+    )
+"""
+
+# One row per stop visit, labeled the way the dashboard groups them. The hour is counted from the
+# start of the service day the way GTFS does, so a trip after midnight is at hour 24 or later.
+# Only trusted visits (#28) count as early, on time, or late; the rest only count as visits, so
+# the dashboard can show how much of the service is covered.
+VISITS = (
+    WITH_DAY_TYPE
+    + """,
     visit AS (
         SELECT so.service_date, dt.day_type, so.route_id, so.stop_id,
             floor(
@@ -43,6 +49,7 @@ VISITS = """
         JOIN day_type dt ON dt.feed_id = t.feed_id AND dt.service_id = t.service_id
     )
 """
+)
 
 # Counts, not percentages or percentiles, so Tableau can add them up under any filter.
 ROUTE_HOUR = (
@@ -70,6 +77,59 @@ STOP_ROUTE = (
 """
 )
 
+# Scheduled bus trips per date and route, and how many appeared in the feed at all (#35). A trip
+# that never appeared was either canceled or ran untracked; the data can't tell which. Each
+# date uses the schedule version in effect (#25), its weekly calendar, and its exceptions. Buses
+# only: METRORail never appears in the feed.
+TRIPS = (
+    WITH_DAY_TYPE
+    + """,
+    day AS (
+        SELECT d::date AS service_date, gtfs_feed_for(d::date) AS feed_id
+        FROM generate_series(
+            (SELECT min(service_date) FROM stop_observation),
+            (SELECT max(service_date) FROM stop_observation),
+            interval '1 day'
+        ) AS d
+    ),
+    service AS (
+        SELECT day.service_date, day.feed_id, c.service_id
+        FROM day
+        JOIN gtfs_calendar c ON c.feed_id = day.feed_id
+        WHERE day.service_date BETWEEN c.start_date AND c.end_date
+            AND CASE extract(isodow FROM day.service_date)
+                WHEN 1 THEN c.monday WHEN 2 THEN c.tuesday WHEN 3 THEN c.wednesday
+                WHEN 4 THEN c.thursday WHEN 5 THEN c.friday WHEN 6 THEN c.saturday
+                ELSE c.sunday
+            END
+            AND NOT EXISTS (
+                SELECT FROM gtfs_calendar_date x
+                WHERE x.feed_id = c.feed_id AND x.service_id = c.service_id
+                    AND x.date = day.service_date AND x.exception_type = 2
+            )
+        UNION
+        SELECT day.service_date, day.feed_id, x.service_id
+        FROM day
+        JOIN gtfs_calendar_date x ON x.feed_id = day.feed_id AND x.date = day.service_date
+        WHERE x.exception_type = 1
+    ),
+    seen AS (
+        SELECT DISTINCT service_date, feed_id, trip_id FROM stop_observation
+    )
+    SELECT s.service_date, dt.day_type, t.route_id,
+        count(*) AS scheduled, count(seen.trip_id) AS seen
+    FROM service s
+    JOIN gtfs_trip t ON t.feed_id = s.feed_id AND t.service_id = s.service_id
+    JOIN gtfs_route r ON r.feed_id = t.feed_id AND r.route_id = t.route_id
+    JOIN day_type dt ON dt.feed_id = t.feed_id AND dt.service_id = t.service_id
+    LEFT JOIN seen ON seen.service_date = s.service_date AND seen.feed_id = t.feed_id
+        AND seen.trip_id = t.trip_id
+    WHERE r.route_type = 3
+    GROUP BY s.service_date, dt.day_type, t.route_id
+    ORDER BY s.service_date, t.route_id
+"""
+)
+
 # Names from the newest schedule version that has each route or stop, so ones METRO has since
 # dropped still have names.
 ROUTES = """
@@ -91,6 +151,7 @@ FILES = {
     "stops.csv": STOPS,
     "route_hour.csv": ROUTE_HOUR,
     "stop_route.csv": STOP_ROUTE,
+    "trips.csv": TRIPS,
 }
 
 
