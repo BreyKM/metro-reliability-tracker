@@ -26,5 +26,16 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://metro_api:${API_DB_PASSWORD:?set API_DB_PASSWORD in .env}@postgres:5432/metro
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:

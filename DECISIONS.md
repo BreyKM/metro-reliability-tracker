@@ -255,6 +255,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** A front end that wants different rounding or units needs an API change. Stop search is a plain substring match, and stops on opposite sides of a street share a name; `/routes` is what tells them apart. There's no authentication or rate limiting, so it isn't meant to be public.  
 **Revisit if:** The API needs to be public (then authentication, rate limits, and CORS), or a client needs raw seconds.
 
+## 31. The API runs in Compose on the server, reached through an SSH tunnel
+
+**Date:** 2026-10-31  
+**Decision:** The API runs as a second Compose service built from the repo's Dockerfile, published only on `127.0.0.1:8000`; for a demo I open it through an SSH tunnel. It connects as `metro_api`, a role created by hand with `SELECT` on only the eight tables the API reads, read-only transactions, a 5-second statement timeout, and at most 8 connections. `metro-update` rebuilds it after the collectors restart and fails the deploy if `/health` doesn't answer. CI validates `compose.yaml`, builds the image, and checks that it answers.  
+**Why:** Running it on the server means the Dockerfile runs for real, not only in CI, and the database password never leaves the server. On the server it runs for real, and the database password never leaves the server. Binding to `127.0.0.1` keeps it off the internet, like Postgres (#20). The role is a second layer under the connection options in #30: a bug that ignored them still couldn't write or read other tables. Rebuilding with `--no-deps` keeps a deploy from recreating Postgres when its settings change; restarting Postgres should always be deliberate. Creating the role by hand keeps its password out of the repo and out of migrations, which also run in CI and locally where the role doesn't exist.  
+**Tradeoff:** The grants live outside migrations, so an endpoint that reads a new table needs a manual `GRANT` on the server (DEPLOY section 9). The collectors run under systemd and the API in Docker, so there are two deploy styles. Roles aren't in `pg_dump`, so a rebuild recreates `metro_api` by hand. Compose checks `API_DB_PASSWORD` for the whole file, so a server without it can't run any Compose command, including backups.  
+**Revisit if:** The API needs to be public (#30), or I containerize the collectors (#12).
+
 ## 32. A small React front end, run locally
 
 **Date:** 2026-10-31  

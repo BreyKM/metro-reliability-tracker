@@ -9,6 +9,7 @@ How the production server is set up and run. Following this top to bottom on a f
 | Collector | systemd service `metro-collector`, as user `metro` | `/opt/metro/app` |
 | Vehicles collector | systemd service metro-vehicles, as user metro | same code, `metro-collector vehicles` |
 | Postgres 18 | Docker Compose, named volume `pgdata`, bound to `127.0.0.1:5432` | `/opt/metro/app/compose.yaml` |
+| API | Docker Compose service `api`, bound to `127.0.0.1:8000`, connects as `metro_api` (read-only) | `/opt/metro/app/compose.yaml` |
 | Raw snapshots | written by the collector, gzipped, one folder per UTC day | `/opt/metro/data/raw` |
 | Raw cleanup | systemd timer `metro-raw-cleanup`, daily 09:00 UTC, keeps ~8 days | `deploy/metro-raw-cleanup.*` |
 | Schedule join | systemd timer `metro-observations`, daily 10:00 UTC, builds `stop_observation` | `deploy/metro-observations.*` |
@@ -70,10 +71,11 @@ sudo usermod -aG metro ADMIN_USER    # log out and back in
 sudo -u metro git clone https://github.com/GITHUB_USER/metro-reliability-tracker.git /opt/metro/app
 ```
 
-`/opt/metro/app/.env` (owner metro, mode 600; generate the password with `openssl rand -hex 32`):
+`/opt/metro/app/.env` (owner metro, mode 600; generate the passwords with `openssl rand -hex 32`):
 
 ```
 POSTGRES_PASSWORD=...
+API_DB_PASSWORD=...
 DATABASE_URL=postgresql://metro_app:...@127.0.0.1:5432/metro
 METRO_GTFSRT_KEY=...
 METRO_TRANSIT_DATA_KEY=...
@@ -83,7 +85,7 @@ RAW_DIR=/opt/metro/data/raw
 ```bash
 cd /opt/metro/app
 sudo docker compose config          # check; output includes the password
-sudo docker compose up -d
+sudo docker compose up -d postgres
 sudo docker compose ps              # expect (healthy)
 sudo ss -tlnp | grep 5432           # expect 127.0.0.1:5432 only
 ```
@@ -193,6 +195,38 @@ sudo systemctl enable --now metro-observations.timer
 
 To rebuild dates after a fix: `cd /opt/metro/app && sudo -u metro -H .venv/bin/metro-build-observations --from YYYY-MM-DD --to YYYY-MM-DD`.
 
+## 9. API
+
+The API runs as the `api` service in Compose and connects as `metro_api`, a role that can only read the tables it needs (DECISIONS #31).
+
+**Set the password before a `compose.yaml` with the `api` service reaches the server.** Compose fills in variables for the whole file, so until `API_DB_PASSWORD` is set, every `docker compose` command fails, including the nightly backup.
+
+1. If `/opt/metro/app/.env` has no `API_DB_PASSWORD` yet (a server set up before the API), generate one with `openssl rand -hex 32` and add it. Hex needs no escaping inside a database URL.
+2. Create the role in psql (`cd /opt/metro/app && sudo docker compose exec postgres psql -U metro_app -d metro`). Paste the same password at the `\password` prompt, so it never appears in shell history:
+   ```sql
+   CREATE ROLE metro_api LOGIN CONNECTION LIMIT 8;
+   \password metro_api
+   GRANT SELECT ON gtfs_feed, gtfs_route, gtfs_stop, gtfs_trip, gtfs_stop_time, gtfs_calendar,
+       stop_observation, schedule_match TO metro_api;
+   ALTER ROLE metro_api SET default_transaction_read_only = on;
+   ALTER ROLE metro_api SET statement_timeout = '5s';
+   ```
+3. Build and start it:
+   ```bash
+   cd /opt/metro/app && sudo docker compose up -d --build --no-deps api
+   curl -fsS http://127.0.0.1:8000/health
+   ```
+
+After this, `metro-update` rebuilds and checks it on every deploy.
+
+To use it from a laptop, tunnel the port, then open http://127.0.0.1:8000/docs:
+
+```bash
+ssh -N -L 8000:127.0.0.1:8000 metro
+```
+
+When an endpoint starts reading another table, add it to the `GRANT` above and run that `GRANT` on the server.
+
 ## Routine operations
 
 ### Deploy a code change
@@ -201,7 +235,7 @@ To rebuild dates after a fix: `cd /opt/metro/app && sudo -u metro -H .venv/bin/m
 sudo metro-update
 ```
 
-It refuses to run unless the server is on `main` with no local changes. It pulls, runs `uv sync` and `metro-migrate`, and only then restarts the collector, so a failed step leaves the old version running. It shows the new logs, and lists any changed files in `deploy/` that need reinstalling by hand. Installed from `deploy/update.sh`:
+It refuses to run unless the server is on `main` with no local changes. It pulls, runs `uv sync` and `metro-migrate`, and only then restarts the collector, so a failed step leaves the old version running. Then it rebuilds the `api` container and checks that `/health` answers. It shows the new logs, and lists any changed files in `deploy/` that need reinstalling by hand. Installed from `deploy/update.sh`:
 
 ```bash
 sudo install -m 750 -o root -g root deploy/update.sh /usr/local/sbin/metro-update
@@ -313,11 +347,11 @@ sudo rm -rf /tmp/restore-test
    ```
 3. Restore it into the empty `metro` database:
    ```bash
-   sudo docker compose exec -T postgres pg_restore -U metro_app -d metro --no-owner < /tmp/restore/metro-YYYY-MM-DDTHHMMSSZ.dump
+   sudo docker compose exec -T postgres pg_restore -U metro_app -d metro --no-owner --no-privileges < /tmp/restore/metro-YYYY-MM-DDTHHMMSSZ.dump
    ```
 4. Run `metro-migrate` to apply any migrations newer than the backup.
 5. Sections 4–6 (skipping the rclone setup already done).
-6. Section 8. Backups leave out `stop_observation` and `schedule_match`, so the first run of `metro-build-observations` rebuilds every finished day.
+6. Sections 8 and 9. Backups leave out `stop_observation` and `schedule_match`, so the first run of `metro-build-observations` rebuilds every finished day. Roles aren't in the dump, so section 9 creates `metro_api` and its grants again.
 
 Data between the last backup and the rebuild is lost and shows as a gap in `poll`.
 
