@@ -60,3 +60,47 @@ jobs:
                   docker run -d --name api --network host -e DATABASE_URL="$TEST_DATABASE_URL" metro-api
                   curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://localhost:8000/health \
                       || (docker logs api; exit 1)
+
+    web:
+        runs-on: ubuntu-latest
+        defaults:
+          run:
+              working-directory: web
+        steps:
+          - uses: actions/checkout@v7
+
+          - uses: actions/setup-node@v6
+            with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: web/package-lock.json
+
+          - name: Install dependencies
+            run: npm ci
+
+          - name: Check formatting
+            run: npm run format:check
+
+          - name: Lint
+            run: npm run lint
+
+          - name: Test
+            run: npm test
+
+          - name: Build
+            run: npm run build
+
+    postgres-settings:
+        runs-on: ubuntu-latest
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+          API_DB_PASSWORD: ci-only-password
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Start Postgres with the server's settings
+              run: docker compose up --wait --wait-timeout 60 postgres
+
+            - name: Show the settings
+              run: docker compose exec -T postgres psql -U metro_app -d metro -v ON_ERROR_STOP=1 -c "SHOW shared_buffers" -c "SHOW checkpoint_timeout" -c "SHOW max_wal_size" -c "SHOW wal_compression"
+

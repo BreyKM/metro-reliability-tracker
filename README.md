@@ -1,4 +1,4 @@
-# Houston METRO Reliability Tracker
+# Houston METRO\* Reliability Tracker
 
 METRO's realtime feed tells you where a bus is right now. Nothing tells you whether that bus is usually late. This project records METRO's live feeds around the clock to build the history that doesn't exist anywhere else, and to answer a rider's question no transit app does: *what time should I leave to make it with 90% confidence?*
 
@@ -19,7 +19,7 @@ Running 24/7 on a VPS since October 16, 2026. As of October 19:
 
 That's 1.17 million trip-stop predictions across 106 routes, 8,903 stops, and 17,342 trips, plus 375,748 GPS positions. A rush-hour snapshot has about 26,700 predictions and takes about 4 seconds to process.
 
-The leave-by query works from the command line and through a read-only API. Answers based on fewer than 20 days are flagged until there's more history.
+The leave-by query works from the command line, through a read-only API, and in a small web page. Answers based on fewer than 20 days are flagged until there's more history.
 
 ## What it measures (and what it doesn't)
 
@@ -33,11 +33,13 @@ That's a **last prediction, not a measured arrival**. When METRO is tracking the
 - **Storage:** PostgreSQL 18. Predictions are upserted at one row per (service date, trip, stop), and an upsert can only move forward in time, so reprocessing old data can't overwrite newer data. GPS positions are append-only.
 - **Schedule:** METRO's static GTFS is loaded with `COPY`, one full version per schedule change. A daily job joins each finished day's predictions to the schedule that was in effect, corrects METRO's date label on after-midnight trips, and alerts me if more than 1% don't match.
 - **API:** FastAPI, read-only, with every query limited to 5 seconds so it can't slow down collection. It answers the leave-by query and looks up stops and routes.
+- **Front end:** React and TypeScript, built with Vite. Pick two stops, a route, a day, and an arrival time, and it shows which bus to take and how each trip has actually run, in plain words instead of percentiles.
+- **Dashboard data:** `metro-export` writes on-time counts by route, hour, and stop, and scheduled vs. seen trips, as CSV files for Tableau. They're counts rather than percentages, so any filter in Tableau still adds up correctly.
 - **Raw data:** every snapshot is saved gzipped for about a week, so the database can be rebuilt if a bug is found.
 - **Operations:** Docker Compose for Postgres and the API, systemd for the collectors, nightly backups to Backblaze B2 (restore tested), and external monitoring that emails me if new data stops arriving.
-- **Code quality:** pytest against a real Postgres in CI, including tests on recorded METRO snapshots; ruff for linting and formatting; CI also builds the API's Docker image and checks that it answers.
+- **Code quality:** pytest against a real Postgres in CI, including tests on recorded METRO snapshots; ruff for linting and formatting; CI also builds the API's Docker image and checks that it answers. The front end has Vitest and Testing Library tests, ESLint, and Prettier.
 
-Built with Python, protobuf (`gtfs-realtime-bindings`), psycopg 3 with hand-written SQL, FastAPI, PostgreSQL, Docker, systemd, and GitHub Actions.
+Built with Python, protobuf (`gtfs-realtime-bindings`), psycopg 3 with hand-written SQL, FastAPI, React, TypeScript, Vite, PostgreSQL, Docker, systemd, and GitHub Actions.
 
 ## Related work
 
@@ -61,11 +63,28 @@ uv run metro-load-gtfs path/to/gtfs.zip --effective-from YYYY-MM-DD
 uv run pytest
 uv run metro-collector        # or: uv run metro-collector vehicles
 uv run metro-leave-by --route 082 --from STOP_ID --to STOP_ID --arrive-by 08:30
+uv run metro-export           # CSV files for Tableau, in data/tableau/
 uv run uvicorn metro.api:app --reload   # API docs at http://127.0.0.1:8000/docs
+```
+
+The front end needs Node 22 and the API running on port 8000:
+
+```bash
+cd web
+npm install
+npm run dev                   # http://localhost:5173
 ```
 
 ## What's next
 
 - Download new schedule versions automatically
 - Measured arrivals from GPS, compared against METRO's predictions
-- A small React front end
+- A Tableau dashboard of on-time performance by route, hour, and stop
+
+## Data and attribution
+
+Route and arrival data provided by permission of METRO.
+
+\* METRO is the registered trademark of the Metropolitan Transit Authority of Harris County, Texas. All rights reserved.
+
+This is an independent project, not affiliated with or endorsed by METRO.

@@ -256,12 +256,27 @@ A restart causes a short gap (usually no missed poll).
 
 ### Changed a file in `deploy/`
 
-Unit files and the backup script are **copied**, so `git pull` alone doesn't change what runs:
+Unit files and the scripts are **copied**, so `git pull` alone doesn't change what runs:
 
 ```bash
 sudo cp deploy/<unit> /etc/systemd/system/ && sudo systemctl daemon-reload
 sudo install -m 750 -o root -g root deploy/backup.sh /usr/local/sbin/metro-backup
+sudo install -m 750 -o root -g root deploy/update.sh /usr/local/sbin/metro-update
 ```
+
+### Changed Postgres settings in `compose.yaml`
+
+`metro-update` doesn't restart Postgres. Recreate the container, then check the settings took:
+
+```bash
+cd /opt/metro/app
+sudo docker compose exec postgres psql -U metro_app -d metro -c "CHECKPOINT"
+sudo docker compose up -d --wait postgres
+sudo docker compose exec postgres psql -U metro_app -d metro -c "SHOW shared_buffers" -c "SHOW checkpoint_timeout"
+sudo journalctl -u metro-collector --since "-2 min" --no-pager
+```
+
+While Postgres restarts, the collectors fetch nothing (#19), so do it at a quiet hour. Expect one or two failed polls in the journal, then normal ones. If `--wait` fails, `sudo docker compose logs postgres --tail 20` shows why; Postgres stops on a misspelled setting. The `CHECKPOINT` first writes out changed pages while Postgres is still running, so the shutdown is quick.
 
 ### Load a new GTFS schedule version
 

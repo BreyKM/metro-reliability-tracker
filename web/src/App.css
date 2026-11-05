@@ -1,0 +1,116 @@
+.field {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.field input:not([type='time']) {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.results {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
+
+.results button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.results button:hover {
+  background: var(--panel);
+}
+
+small,
+.hint {
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+button.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error {
+  color: var(--error);
+}
+
+.warning {
+  color: var(--warn);
+}
+
+.recommendation {
+  background: var(--panel);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+}
+
+.headline {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+tr.best {
+  background: var(--panel);
+  font-weight: 600;
+}
