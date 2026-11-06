@@ -296,11 +296,12 @@ cd /opt/metro/app && sudo -u metro -H .venv/bin/metro-load-gtfs /opt/metro/data/
 cd /opt/metro/app && time sudo -u metro -H .venv/bin/metro-export --out /tmp/tableau
 ```
 
-On the laptop, from the repo root, copy the files into `data/tableau/`, then delete the server's copy:
+On the laptop, from the repo root, copy the files into `data/tableau/`:
 
 ```bash
 scp "metro:/tmp/tableau/*.csv" data/tableau/
 ```
+
 Then, on the server: `sudo rm -r /tmp/tableau`.
 
 Open `tableau/metro.twb`, which reads the new files, and update the date range in the dashboard header. Save with **File → Save**: Ctrl+S in Tableau Public publishes instead. Publish with **File → Save to Tableau Public As**, then close without saving again.
