@@ -16,4 +16,4 @@ wheels/
 data/
 
 # Tableau recovery files
-Tableau/~*
+tableau/~*
