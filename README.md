@@ -21,6 +21,8 @@ That's 1.17 million trip-stop predictions across 106 routes, 8,903 stops, and 17
 
 The leave-by query works from the command line, through a read-only API, and in a small web page. Answers based on fewer than 20 days are flagged until there's more history.
 
+The [dashboard on Tableau Public](https://public.tableau.com/app/profile/bredan.mwaura/viz/HoustonMETROBusReliability/Dashboard) shows on-time performance by day, route, hour, and stop, and how many scheduled trips appeared in the feed at all. From October 17 to November 3, local buses reached stops on time 60.8% of the time, against METRO's 74% goal. METRO measures departures at selected stops, so the two are comparable but not identical.
+
 ## What it measures (and what it doesn't)
 
 METRO's TripUpdates feed predicts when each bus will reach each upcoming stop, and drops a stop once the bus passes it. The collector keeps the last prediction it saw for every stop, so each trip-stop ends with METRO's final prediction before the bus arrived.
@@ -34,7 +36,7 @@ That's a **last prediction, not a measured arrival**. When METRO is tracking the
 - **Schedule:** METRO's static GTFS is loaded with `COPY`, one full version per schedule change. A daily job joins each finished day's predictions to the schedule that was in effect, corrects METRO's date label on after-midnight trips, and alerts me if more than 1% don't match.
 - **API:** FastAPI, read-only, with every query limited to 5 seconds so it can't slow down collection. It answers the leave-by query and looks up stops and routes.
 - **Front end:** React and TypeScript, built with Vite. Pick two stops, a route, a day, and an arrival time, and it shows which bus to take and how each trip has actually run, in plain words instead of percentiles.
-- **Dashboard data:** `metro-export` writes on-time counts by route, hour, and stop, and scheduled vs. seen trips, as CSV files for Tableau. They're counts rather than percentages, so any filter in Tableau still adds up correctly.
+- **Dashboard data:** `metro-export` writes on-time counts by route, hour, and stop, and scheduled vs. seen trips, as CSV files for Tableau. They're counts rather than percentages, so any filter in Tableau still adds up correctly. The workbook is `tableau/metro.twb`.
 - **Raw data:** every snapshot is saved gzipped for about a week, so the database can be rebuilt if a bug is found.
 - **Operations:** Docker Compose for Postgres and the API, systemd for the collectors, nightly backups to Backblaze B2 (restore tested), and external monitoring that emails me if new data stops arriving.
 - **Code quality:** pytest against a real Postgres in CI, including tests on recorded METRO snapshots; ruff for linting and formatting; CI also builds the API's Docker image and checks that it answers. The front end has Vitest and Testing Library tests, ESLint, and Prettier.
@@ -79,7 +81,6 @@ npm run dev                   # http://localhost:5173
 
 - Download new schedule versions automatically
 - Measured arrivals from GPS, compared against METRO's predictions
-- A Tableau dashboard of on-time performance by route, hour, and stop
 
 ## Data and attribution
 
