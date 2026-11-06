@@ -296,6 +296,14 @@ Chose a regular data-center VPS, not a Local Zone, because Local Zone VPSs don't
 **Tradeoff:** A missing trip was either canceled or ran without METRO tracking it. TripUpdates and the GPS feed both come from METRO's tracking system, so they go missing together and can't tell the two apart. That's why the measure is "seen", not "ran". A trip counts as seen even if only one of its stops appeared. The first date is partial; collection started on the afternoon of 10/16.  
 **Revisit if:** Cancellations become measurable, for example through the Arrivals endpoint's cancellation flag (#1); then canceled and untracked trips can be counted separately.
 
+## 36. Half-full pages for `stop_prediction`
+
+**Date:** 2026-11-04  
+**Decision:** `stop_prediction` is stored with `fillfactor = 50`: new pages are filled only halfway, and the rest is kept for updates.  
+**Why:** After #33, only about 44% of updates to this table were HOT. A HOT update writes the new version on the same page and doesn't touch the index, but that needs free space on the page. With full pages, 56% of updates had to move the row to another page and add an index entry, which means more log, more pages to write, and more vacuum work. The rows on a page arrive in the same poll (about 194 rows a poll) and are updated together on most polls after that (about 87 times over 54 minutes on 10/27). So every live row on a page needs room for a new version at the same time. Rows are about 144 bytes, and a half-full page has room for one new version of each. By the next poll the old versions are 30 seconds dead, and Postgres clears them when it next touches the page.  
+**Tradeoff:** Pages stay half empty after their trips finish, so new rows take up to twice the space: up to about 65 MB a day at October's volume, which moves the disk-full date (see "Not decided yet") about a month earlier. Only pages written after the change are affected; older pages stay full. While a long transaction is open, such as the nightly backup, old versions can't be cleared yet, so updates during it still move rows to other pages.  
+**Revisit if:** HOT updates stay well below 90% (then try a lower fillfactor), or disk space becomes the tighter limit.
+
 ## Not decided yet
 
 - **Which Vehicles row is the current trip** when a bus has two rows.
