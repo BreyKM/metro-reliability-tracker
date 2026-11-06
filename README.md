@@ -8,16 +8,18 @@ METRO's local buses carry about 195,000 boardings on an average weekday ([riders
 
 ## Status
 
-Running 24/7 on a VPS since October 16, 2026. As of October 19:
+Running 24/7 on a VPS since October 16, 2026. As of November 5:
 
 | | Arrival predictions (GTFS-Realtime) | Bus GPS positions |
 |---|---|---|
 | Recording since | 2026-10-16 | 2026-10-19 |
-| Polls | 7,935 | 1,061 |
-| Successful | 100% | 100% |
-| Missed polls | 0 | 0 |
+| Polls | 58,165 | 51,287 |
+| Successful | 99.998% | 99.998% |
+| Missed polls | 7 | 1 |
 
-That's 1.17 million trip-stop predictions across 106 routes, 8,903 stops, and 17,342 trips, plus 375,748 GPS positions. A rush-hour snapshot has about 26,700 predictions and takes about 4 seconds to process.
+Six of the seven missed arrival polls were in the first five minutes of collection, while I was still setting it up. The others, one per feed, were a planned Postgres restart on November 4.
+
+That's 9.2 million trip-stop predictions across 106 routes, 8,903 stops, and 144,482 trips, plus 17.9 million GPS positions. A rush-hour snapshot has about 25,000 predictions and takes under 4 seconds to process.
 
 The leave-by query works from the command line, through a read-only API, and in a small web page. Answers based on fewer than 20 days are flagged until there's more history.
 
