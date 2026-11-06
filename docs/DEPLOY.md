@@ -288,6 +288,25 @@ sudo -u metro curl -fL -o /opt/metro/data/gtfs/metro_gtfs_YYYYMMDD.zip "https://
 cd /opt/metro/app && sudo -u metro -H .venv/bin/metro-load-gtfs /opt/metro/data/gtfs/metro_gtfs_YYYYMMDD.zip --effective-from YYYY-MM-DD
 ```
 
+### Export data for the dashboard
+
+`metro-export` runs on the server as `metro`, so it uses the server's `.env` and connects as `metro_app`. It can't run through the SSH tunnel: `metro_api` can only read the tables the API uses, and the export also reads `gtfs_calendar_date`.
+
+```bash
+cd /opt/metro/app && time sudo -u metro -H .venv/bin/metro-export --out /tmp/tableau
+```
+
+On the laptop, from the repo root, copy the files into `data/tableau/`, then delete the server's copy:
+
+```bash
+scp "metro:/tmp/tableau/*.csv" data/tableau/
+```
+Then, on the server: `sudo rm -r /tmp/tableau`.
+
+Open `tableau/metro.twb`, which reads the new files, and update the date range in the dashboard header. Save with **File → Save**: Ctrl+S in Tableau Public publishes instead. Publish with **File → Save to Tableau Public As**, then close without saving again.
+
+On 2026-11-05 the export took 70 seconds for data from 10/16 to 11/3. Each query has a 2-minute limit (DECISIONS #34), and the time grows with every day of data.
+
 ### Health checks
 
 ```bash
